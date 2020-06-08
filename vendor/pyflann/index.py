@@ -24,8 +24,8 @@
 #(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from bindings.flann_ctypes import *
-from io.dataset import *
+from .bindings.flann_ctypes import *
+from .io.dataset import *
 import numpy.random as _rn
 
 
@@ -252,7 +252,9 @@ class FLANN:
         if self.__curindex_type != query.dtype.type:
             raise FLANNException("Index and query must have the same type")
 
-        npts, dim = self.__curindex_data.shape        
+        npts, dim = self.__curindex_data.shape
+        npts = kwargs.pop("max_nn", npts)  # ZBS added this
+
         assert(query.shape[0]==dim)
         
         result = empty( npts, dtype=index_type)
