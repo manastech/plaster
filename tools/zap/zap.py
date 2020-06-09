@@ -79,7 +79,7 @@ def _cpu_count():
 
 def _show_work_order_exception(e):
     """Mock-point"""
-    error("An exception was thrown by a work_order ------")
+    error("\nAn exception was thrown by a work_order ------")
     info("".join(e.exception_lines))
     error("----------------------------------------------")
 
@@ -637,7 +637,6 @@ def df_groups(fn, df_group, **kwargs):
         return Munch(args=(group.copy(),), _index=tuple(group.index.values), **kwargs)
 
     _work_orders = df_group.apply(_do_get_calls)
-    # work_order_i_by_index = {wo._index: i for i, wo in enumerate(_work_orders)}
 
     wo_kwargs = {}
     non_wo_kwargs = {}
@@ -648,7 +647,6 @@ def df_groups(fn, df_group, **kwargs):
             wo_kwargs[k] = v
 
     _work_orders_with_fn = []
-    non_wo_kwargs = {}
     for wo in _work_orders:
         del wo["_index"]
         wo["fn"] = fn

@@ -20,6 +20,7 @@ class TestNNResult(BaseResult):
         test_pred_pep_iz=np.ndarray,
         test_pep_scores=np.ndarray,
         test_scores=np.ndarray,
+        test_vdists=np.ndarray,
         test_peps_pr=(type(None), pd.DataFrame),
         test_peps_pr_abund=(type(None), pd.DataFrame),
         train_true_pep_iz=(type(None), np.ndarray),
@@ -31,6 +32,7 @@ class TestNNResult(BaseResult):
         train_pred_pep_iz=(type(None), np.ndarray),
         train_pep_scores=(type(None), np.ndarray),
         train_scores=(type(None), np.ndarray),
+        train_vdists=(type(None), np.ndarray),
         train_peps_pr=(type(None), pd.DataFrame),
         train_peps_pr_abund=(type(None), pd.DataFrame),
     )

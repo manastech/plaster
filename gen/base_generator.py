@@ -177,6 +177,17 @@ class BaseGenerator(Munch):
 
         self._report_sections = []
         self._report_preamble = None
+        self._validate_protein_of_interest()
+
+    def _validate_protein_of_interest(self):
+        if "protein" in self:
+            seq_ids = {seq["id"] for seq in self.protein}
+            for poi in self.protein_of_interest:
+                if poi not in seq_ids:
+                    raise ValueError(
+                        f"protein_of_interest '{poi}' is not in the protein id list. "
+                        f"Confirm you specified a Name and not a UniprotAC"
+                    )
 
     def setup_err_model(self):
         err_param_dict = defaultdict(list)

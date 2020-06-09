@@ -487,8 +487,8 @@ def prep(prep_params, pro_spec_df):
         if ptm_peps_df is not None and len(ptm_peps_df) > 0:
             peps_df = pd.concat([peps_df, ptm_peps_df])
             pep_seqs_df = pd.concat([pep_seqs_df, ptm_pep_seqs_df])
-    else:
-        important("Skipping ptm permutations because n_ptms_limit is 0")
+    # else:
+    #     important("Skipping ptm permutations because n_ptms_limit is 0")
 
     return PrepResult(
         params=prep_params,

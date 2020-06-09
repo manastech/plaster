@@ -499,7 +499,11 @@ def _do_pep_sim(pep_seq_df, sim_params, n_samples):
 
     recall_numer = 0
     recall_denom = 0
-    n_allowable_sampling_batches = 10
+    n_allowable_sampling_batches = 1 if sim_params.is_survey else 10
+
+    if sim_params.is_survey:
+        assert n_samples == 1
+
     for iteration in range(n_allowable_sampling_batches):
         initial_flu_samples = _step_2_initialize_samples_including_dark_sampling(
             flu, p_bright, n_samples
@@ -556,6 +560,58 @@ def _do_pep_sim(pep_seq_df, sim_params, n_samples):
     return dyemat, radmat, recall_fraction, compact_flu, remainder_flu
 
 
+def _run_sim(sim_params, pep_seqs_df, n_samples, progress):
+    if sim_params.get("random_seed") is not None:
+        # Increment so that train and test will be different
+        sim_params.random_seed += 1
+
+    dyemats__radmats__recalls__flus__remainders = zap.df_groups(
+        _do_pep_sim,
+        pep_seqs_df.groupby("pep_i"),
+        sim_params=sim_params,
+        n_samples=n_samples,
+        _progress=progress,
+        _trap_exceptions=False,
+        _process_mode=True,
+    )
+
+    dyemat = np.array(utils.listi(dyemats__radmats__recalls__flus__remainders, 0))
+    radmat = np.array(utils.listi(dyemats__radmats__recalls__flus__remainders, 1))
+
+    n_peps, _n_samples, n_channels, n_cycles = dyemat.shape
+    assert _n_samples == n_samples
+
+    dyemat = dyemat.reshape(n_peps * n_samples, n_channels * n_cycles)
+    radmat = radmat.reshape(n_peps * n_samples, n_channels * n_cycles)
+
+    flus = np.array(utils.listi(dyemats__radmats__recalls__flus__remainders, 3))
+    flu_remainders = np.array(
+        utils.listi(dyemats__radmats__recalls__flus__remainders, 4)
+    )
+
+    true_pep_i = np.repeat(np.arange(n_peps), n_samples)
+
+    recalls = np.array(utils.listi(dyemats__radmats__recalls__flus__remainders, 2))
+    recalls_over_peps = np.repeat(recalls, n_samples)
+    assert recalls_over_peps.shape[0] == true_pep_i.shape[0]
+
+    # recalls of nan are a sentinel to indicate that those peptides are to be removed
+    all_dark_rows = np.argwhere(np.isnan(recalls_over_peps))
+    dyemat = np.delete(dyemat, all_dark_rows, axis=0)
+    radmat = np.delete(radmat, all_dark_rows, axis=0)
+    true_pep_i = np.delete(true_pep_i, all_dark_rows, axis=0)
+
+    assert np.all(np.any(dyemat > 0, axis=1))
+    assert np.all(np.any(radmat > 0, axis=1))
+
+    # CONVERT the nan recalls to zero
+    recalls = np.nan_to_num(recalls)
+
+    assert np.all((0.0 <= recalls) & (recalls <= 1.0))
+
+    return dyemat, radmat, true_pep_i, recalls, flus, flu_remainders
+
+
 def sim(sim_params, prep_result, progress=None, pipeline=None):
     """
     Map the simulation over the peptides in prep_result.
@@ -565,62 +621,10 @@ def sim(sim_params, prep_result, progress=None, pipeline=None):
     the the error modes and radiometry noise is different in each set.
     """
 
-    # sim_params._build_join_dfs()
-
+    # TODO: Is this correct? Shouldn't this be conditional?
     sim_params.random_seed = 1
 
-    def run_sim(pep_seqs_df, n_samples):
-        if sim_params.get("random_seed") is not None:
-            # Increment so that train and test will be different
-            sim_params.random_seed += 1
-
-        dyemats__radmats__recalls__flus__remainders = zap.df_groups(
-            _do_pep_sim,
-            pep_seqs_df.groupby("pep_i"),
-            sim_params=sim_params,
-            n_samples=n_samples,
-            _progress=progress,
-            _trap_exceptions=False,
-            _process_mode=True,
-        )
-
-        dyemat = np.array(utils.listi(dyemats__radmats__recalls__flus__remainders, 0))
-        radmat = np.array(utils.listi(dyemats__radmats__recalls__flus__remainders, 1))
-
-        n_peps, _n_samples, n_channels, n_cycles = dyemat.shape
-        assert _n_samples == n_samples
-
-        dyemat = dyemat.reshape(n_peps * n_samples, n_channels * n_cycles)
-        radmat = radmat.reshape(n_peps * n_samples, n_channels * n_cycles)
-
-        flus = np.array(utils.listi(dyemats__radmats__recalls__flus__remainders, 3))
-        flu_remainders = np.array(
-            utils.listi(dyemats__radmats__recalls__flus__remainders, 4)
-        )
-
-        true_pep_i = np.repeat(np.arange(n_peps), n_samples)
-
-        recalls = np.array(utils.listi(dyemats__radmats__recalls__flus__remainders, 2))
-        recalls_over_peps = np.repeat(recalls, n_samples)
-        assert recalls_over_peps.shape[0] == true_pep_i.shape[0]
-
-        # recalls of nan are a sentinel to indicate that those peptides are to be removed
-        all_dark_rows = np.argwhere(np.isnan(recalls_over_peps))
-        dyemat = np.delete(dyemat, all_dark_rows, axis=0)
-        radmat = np.delete(radmat, all_dark_rows, axis=0)
-        true_pep_i = np.delete(true_pep_i, all_dark_rows, axis=0)
-
-        assert np.all(np.any(dyemat > 0, axis=1))
-        assert np.all(np.any(radmat > 0, axis=1))
-
-        # CONVERT the nan recalls to zero
-        recalls = np.nan_to_num(recalls)
-
-        assert np.all((0.0 <= recalls) & (recalls <= 1.0))
-
-        return dyemat, radmat, true_pep_i, recalls, flus, flu_remainders
-
-    # TRAIN on all peptides (real and decoy)
+    # CREATE a *training-set* for all peptides (real and decoy)
     if pipeline:
         pipeline.set_phase(0, 2)
 
@@ -636,33 +640,41 @@ def sim(sim_params, prep_result, progress=None, pipeline=None):
         train_recalls,
         train_flus,
         train_flu_remainders,
-    ) = run_sim(pep_seqs_with_decoys, n_samples=sim_params.n_samples_train)
+    ) = _run_sim(sim_params, pep_seqs_with_decoys, n_samples=sim_params.n_samples_train, progress=progress)
 
-    # TEST on only real peptides
-    if pipeline:
-        pipeline.set_phase(1, 2)
+    if sim_params.is_survey:
+        test_dyemat = None
+        test_radmat = None
+        test_true_pep_iz = None
+        test_recalls = None
+        test_flus = None
+        test_flu_remainders = None
+    else:
+        # CREATE a *test-set* for real-only peptides
+        if pipeline:
+            pipeline.set_phase(1, 2)
 
-    (
-        test_dyemat,
-        test_radmat,
-        test_true_pep_iz,
-        test_recalls,
-        test_flus,
-        test_flu_remainders,
-    ) = run_sim(prep_result.pepseqs__no_decoys(), n_samples=sim_params.n_samples_test)
+        (
+            test_dyemat,
+            test_radmat,
+            test_true_pep_iz,
+            test_recalls,
+            test_flus,
+            test_flu_remainders,
+        ) = _run_sim(sim_params, prep_result.pepseqs__no_decoys(), n_samples=sim_params.n_samples_test, progress=progress)
 
-    # CHECK that the train and test are not identical
-    # If they are, there was some sort of RNG seed errors which might happen
-    # for example if sub-processes failed to re-init their RNG seeds.
-    train_non_zero_rows = np.any(train_radmat > 0, axis=1)
-    train_rows = train_radmat[train_non_zero_rows][0:100]
+        # CHECK that the train and test are not identical
+        # If they are, there was some sort of RNG seed errors which might happen
+        # for example if sub-processes failed to re-init their RNG seeds.
+        train_non_zero_rows = np.any(train_radmat > 0, axis=1)
+        train_rows = train_radmat[train_non_zero_rows][0:100]
 
-    test_non_zero_rows = np.any(test_radmat > 0, axis=1)
-    test_rows = test_radmat[test_non_zero_rows][0:100]
+        test_non_zero_rows = np.any(test_radmat > 0, axis=1)
+        test_rows = test_radmat[test_non_zero_rows][0:100]
 
-    if train_rows.shape[0] > 0 and not sim_params.allow_train_test_to_be_identical:
-        any_differences = np.any(np.diagonal(cdist(train_rows, test_rows)) != 0.0)
-        check.affirm(any_differences, "Train and test sets are identical")
+        if train_rows.shape[0] > 0 and not sim_params.allow_train_test_to_be_identical:
+            any_differences = np.any(np.diagonal(cdist(train_rows, test_rows)) != 0.0)
+            check.affirm(any_differences, "Train and test sets are identical")
 
     return SimResult(
         params=sim_params,

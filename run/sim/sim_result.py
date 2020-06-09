@@ -17,12 +17,12 @@ class SimResult(BaseResult):
         train_recalls=np.ndarray,
         train_flus=np.ndarray,
         train_flu_remainders=np.ndarray,
-        test_dyemat=np.ndarray,
-        test_radmat=np.ndarray,
-        test_true_pep_iz=np.ndarray,
-        test_flus=np.ndarray,
-        test_flu_remainders=np.ndarray,
-        test_recalls=np.ndarray,
+        test_dyemat=(type(None), np.ndarray),
+        test_radmat=(type(None), np.ndarray),
+        test_true_pep_iz=(type(None), np.ndarray),
+        test_flus=(type(None), np.ndarray),
+        test_flu_remainders=(type(None), np.ndarray),
+        test_recalls=(type(None), np.ndarray),
         _flus=pd.DataFrame,
     )
 

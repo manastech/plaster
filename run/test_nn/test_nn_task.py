@@ -3,6 +3,7 @@ from plaster.run.sim.sim_result import SimResult
 from plaster.run.prep.prep_result import PrepResult
 from plaster.run.test_nn.test_nn_params import TestNNParams
 from plaster.run.test_nn.test_nn_worker import test_nn
+# from plaster.tools.log.log import prof
 
 
 class TestNNTask(PipelineTask):

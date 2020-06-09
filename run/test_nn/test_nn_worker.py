@@ -5,6 +5,7 @@ from plaster.tools.utils import utils
 from plaster.run.call_bag import CallBag
 from plaster.run.test_nn.test_nn_result import TestNNResult
 from plaster.run.nn import nn
+from plaster.tools.log.log import debug, prof
 
 
 def test_nn(test_nn_params, prep_result, sim_result, progress=None, pipeline=None):
@@ -67,6 +68,7 @@ def test_nn(test_nn_params, prep_result, sim_result, progress=None, pipeline=Non
 
     else:
         train_result = {k: None for k in test_result.keys()}
+    prof()
 
     def rename(d, prefix):
         return {f"{prefix}{k}": v for k, v in d.items()}
