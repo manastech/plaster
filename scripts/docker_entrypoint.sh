@@ -26,6 +26,7 @@ BWhite='\033[1;37m'
 trap "exit 1" TERM
 export _TOP_PID=$$
 
+
 realpath() {
     [[ $1 = /* ]] && echo "$1" || echo "$PWD/${1#./}"
 }
@@ -33,7 +34,11 @@ realpath() {
 log_it() {
 	# This executes the passed arguments and then captures both stdout and stderr to LOGFILE
 	# and passes them through tee so that they will also be visible.
-	"$@" 2>&1 | tee -a "${LOG_FILE}"
+	if [[ -z "${LOG_FILE}" ]]; then
+		"$@" 2>&1
+	else
+		"$@" 2>&1 | tee -a "${LOG_FILE}"
+	fi
 }
 
 error() {
@@ -96,14 +101,21 @@ emit_stop() {
 prof $LINENO
 
 _CONTAINER_ID=$(head -1 /proc/self/cgroup|cut -d/ -f3)
-_CALLING_PATH=$(realpath "${BASH_SOURCE[0]}")
-_CALLING_DIR=$(dirname "${_CALLING_PATH}")
-ERISYON_ROOT=${ERISYON_ROOT:-"${_CALLING_DIR}"}
-export ERISYON_ROOT
+
+if [[ -e "plaster_root" ]]; then
+	:
+else
+	if [[ ! -e "erisyon_root" ]]; then
+		ls -l
+		error "Are you sure you are in the erisyon folder? (erisyon_root not found.)"
+	fi
+fi
+
+export ERISYON_ROOT=/erisyon
 
 # This is now to only place that PYTHONPATH is set. (There were previously several over-rides)
 export PYTHONPATH=${PYTHONPATH}:${ERISYON_ROOT}:${ERISYON_ROOT}/overloads:${ERISYON_ROOT}/plaster/vendor:/venv/.venv/lib/python3.8/site-packages
-export PATH=$PATH:/erisyon:/erisyon/plaster
+export PATH=$PATH:/erisyon:/erisyon/plaster:/venv/.venv/bin
 
 # CHECK for a valid stdin tty, i.e. tty 0; `-t 0` is bash-ese for test for file descriptor 0
 export ERISYON_HEADLESS=1
@@ -155,35 +167,18 @@ fi
 _CMD="$1"
 shift
 ARGS=( "${@}" )
+echo "ARGS=${ARGS}"
 case ${_CMD} in
     shell)
         # INTERACTIVE shell, must be run in ERISYON_HEADLESS=0
         if [[ "${ERISYON_HEADLESS}" != "0" ]]; then
             error "Error: docker must be run with '-it' flags"
         fi
-        # function p { exec ./plaster.sh \$@ ; } ;
         prof $LINENO
-		if [[ "${DEV}" == "1" ]]; then
-			python ./internal/scripts/p_internal.py dev_startup
-		fi
         exec /bin/bash \
             --noprofile \
             --rcfile \
               <(echo "[[ -e .autocomp ]] && { source .autocomp ; } ; [[ -e /root/git-completion.bash ]] && source '/root/git-completion.bash'; export PS1=\"$PS1\" ; function tt { echo -ne \"\033]0;\"\$*\"\007\" ; } ;  " )
-        ;;
-    bash)
-        # Run some bash commands
-        prof $LINENO
-        shift
-        _RUN_ME=${ARGS[@]}  # This is an example of bash insanity. Why do I need this intermediate variable? Because it is outside of quotes?
-        if [[ -n "${LOG_FILE}" ]]; then
-            emit_start
-            log_it /bin/bash --noprofile --norc -c "${_RUN_ME}"
-            _RETURN_CODE="$?"
-            emit_stop
-        else
-            /bin/bash --noprofile --norc -c "${_RUN_ME}"
-        fi
         ;;
     bash_file)
         # Run a bash script, used by ./p so that all the arguments are encoded correctly.
@@ -198,8 +193,18 @@ case ${_CMD} in
         fi
         ;;
     *)
-        echo "Unknown commands to docker_entrypoint '${_CMD}' '${ARGS}'"
-        echo "Allowed are: shell, bash, bash_file"
+        # Run some bash commands
+        prof $LINENO
+        _RUN_ME=${ARGS[@]}  # This is an example of bash insanity. Why do I need this intermediate variable? Because it is outside of quotes?
+        echo "_RUN_ME=${_RUN_ME}"
+        if [[ -n "${LOG_FILE}" ]]; then
+            emit_start
+            log_it /bin/bash --noprofile --norc -c "${_RUN_ME}"
+            _RETURN_CODE="$?"
+            emit_stop
+        else
+            /bin/bash --noprofile --norc -c "${_RUN_ME}"
+        fi
         ;;
 esac
 

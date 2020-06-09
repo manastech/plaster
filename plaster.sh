@@ -22,8 +22,7 @@ Variables of interest:
         * Note that WHILE you are in DEV=1 container that you can still
           run plaster.sh commands that themselves run insider other containers.
           For example, when you e2e tests.
-    * IMAGE=X: Force specific docker image, otherwise uses erisyon/plaster:latest"
-    * MYIMAGE=1: Use image erisyon/plaster:\$USER
+    * IMAGE=X: Force specific docker image, otherwise uses plaster:latest
     * DEBUG=1: Show debugging of this script. (Is passed along into the container environment)
     * PROF=1: Show bash line numbers and run times. (Is passed along into the container environment)
     * ROOT=1: Run the container user as root (others clones from the host)
@@ -36,8 +35,6 @@ Variables of interest:
     * DO_NOT_OVERWRITE_PLASTER_SH=1: Set to prevent updating plaster.sh (also looks for source code to prevent this)
     * ALLOW_SUDO=1: Permit the container to have sudo permission
     * EXTRA_DOCKER_ARGS=X: Add docker args
-    * JOBS_FOLDER=X: Default is ./jobs_folder
-    * JOBS_FOLDER_MOUNT=X: Default /erisyon/plaster/jobs_folder
     * ERISYON_HEADLESS=1: Set the container into headless mode
     * JUP=1: If 1, bind 8080
     * LOG_FILE: If set, redirect stdout and stderr to LOG_FILE
@@ -50,15 +47,14 @@ Variables of interest:
 Examples:
 
   To force a run on a local docker and "run":
-    $ IMAGE=erisyon/plaster:zack ./plaster.sh run ./jobs_folder/experiment1
+    $ IMAGE=plaster:zack ./plaster.sh run ./jobs_folder/experiment1
 
   Run in dev mode using your own container:
-    $ DEV=1 MYIMAGE=1 ./plaster.sh
+    $ DEV=1 ./plaster.sh
 
 References:
     * Indispensbile cheatsheet on bash hacking: https://devhints.io/bash
 '
-
 
 # Functions
 #-----------------------------------------------------------------------------------------
@@ -246,8 +242,7 @@ main() {
     # Public
     DEBUG=${DEBUG:-0}
     PROF=${PROF:-0}
-    IMAGE=${IMAGE:-""}
-    MYIMAGE=${MYIMAGE:-0}
+    IMAGE=${IMAGE:-"plaster:latest"}
     FORCE_PULL=${FORCE_PULL:-0}
     DEV=${DEV:-0}
     RUN_USER=${RUN_USER:-$USER}
@@ -258,8 +253,6 @@ main() {
     DO_NOT_OVERWRITE_PLASTER_SH=${DO_NOT_OVERWRITE_PLASTER_SH:-0}
     ALLOW_SUDO=${ALLOW_SUDO:-0}
     EXTRA_DOCKER_ARGS=${EXTRA_DOCKER_ARGS:-""}
-    JOBS_FOLDER=${JOBS_FOLDER:-"./jobs_folder"}
-    JOBS_FOLDER_MOUNT=${JOBS_FOLDER_MOUNT:="/erisyon/plaster/jobs_folder"}
     JUP=${JUP:-0}
     LOG_FILE=${LOG_FILE:-""}
     FORCE_NEW_CONTAINER=${FORCE_NEW_CONTAINER:-""}
@@ -271,24 +264,20 @@ main() {
     PYTHON_ENTRYPOINT=${PYTHON_ENTRYPOINT:-"python -u ./scripts/main.py"}
     ALLOW_SSH_AGENT=${ALLOW_SSH_AGENT:-0}
 
-    if [[ -z "${IMAGE}" ]] && [[ "${MYIMAGE}" == "1" ]]; then
-        IMAGE="erisyon/plaster:${USER}"
-    fi
+	if [[ ! "${IMAGE}" == *":"* ]]; then
+		error "\$IMAGE must contain a tag"
+	fi
 
     # Private
     INFO=${INFO:-1}
-    _EXISTING_DOCKER_TAG=${HOST_DOCKER_TAG:-latest}
-    _IMAGE=${IMAGE:-erisyon/plaster:$_EXISTING_DOCKER_TAG}
     _PROGRAM_ARGS=( "$@" )
     debug "TOP _PROGRAM_ARGS=${_PROGRAM_ARGS[@]}"
-
-    # Public, but with default from private
-    HOST_DOCKER_TAG=${HOST_DOCKER_TAG:-$(docker_tag "$_IMAGE")}
 
     if [[ ! -z "${TITLE}" ]]; then
         info "------------ ${TITLE} -------------------"
     fi
 
+    debug "IMAGE=$IMAGE"
     debug "ROOT=$ROOT"
     debug "FORCE_PULL=$FORCE_PULL"
     debug "DEV=$DEV"
@@ -296,13 +285,11 @@ main() {
     debug "FOLDER_USER=$FOLDER_USER"
     debug "USER=$USER"
     debug "SSH_KEYS=$SSH_KEYS"
-    debug "HOST_DOCKER_TAG=$HOST_DOCKER_TAG"
     debug "NO_NETWORK=$NO_NETWORK"
     debug "DO_NOT_OVERWRITE_PLASTER_SH=$DO_NOT_OVERWRITE_PLASTER_SH"
     debug "ALLOW_SUDO=$ALLOW_SUDO"
     debug "EXTRA_DOCKER_ARGS=$EXTRA_DOCKER_ARGS"
     debug "ERISYON_HEADLESS=$ERISYON_HEADLESS"
-    debug "JOBS_FOLDER=$JOBS_FOLDER"
     debug "JUP=$JUP"
     debug "LOG_FILE=$LOG_FILE"
     debug "DEED=$DEED"
@@ -312,7 +299,6 @@ main() {
     debug "ERISYON_TMP=$ERISYON_TMP"
     debug "OSX_VM=$OSX_VM"
     debug "_EXISTING_DOCKER_TAG=$_EXISTING_DOCKER_TAG"
-    debug "_IMAGE=$_IMAGE"
     debug "_PROGRAM_ARGS=$_PROGRAM_ARGS"
     debug "_RUNTMP=$_RUNTMP"
 
@@ -323,8 +309,6 @@ main() {
 
     # Tests
     #-----------------------------------------------------------------------------------------
-
-    [[ -n "${HOST_DOCKER_TAG}" ]] || error "HOST_DOCKER_TAG can not be empty"
 
     command -v docker >/dev/null 2>&1 || {
         error "'docker' is not installed. sudo apt install docker.io"
@@ -341,12 +325,15 @@ main() {
     # Setup jobs_folder
     #-----------------------------------------------------------------------------------------
 
-    # Where is it? Is it a symlink?
-    if [[ -L "${JOBS_FOLDER}" ]]; then
-        _JOBS_FOLDER=$(readlink "${JOBS_FOLDER}")
-    else
-        _JOBS_FOLDER=$(realpath "${JOBS_FOLDER}")
+    if [[ ! -e "./jobs_folder" ]]; then
+    	error "You must have a jobs_folder sym_link to a jobs_folder in this directory"
     fi
+
+    if [[ ! -h "./jobs_folder" ]]; then
+    	error "./jobs_folder must be a symlink"
+    fi
+
+	HOST_JOBS_FOLDER=$(readlink "./jobs_folder")
 
     prof $LINENO
 
@@ -355,10 +342,6 @@ main() {
 
     if [[ "${DEV}" == "1" ]]; then
         # Development mode
-#		if [[ ! -e "plaster_root" ]]; then
-#			error "Are you sure you are in the plaster folder? (plaster_root not found.)"
-#		fi
-
         [[ -n "${SSH_AUTH_SOCK}" ]] || error "SSH_AUTH_SOCK not set"
 
         _DEV_OPTIONS=" \
@@ -389,14 +372,16 @@ main() {
     # docker pull
     #-----------------------------------------------------------------------------------------
     if [[ (-z "${IMAGE}" || "${FORCE_PULL}" == "1") && "${DEV}" != "1" ]]; then
+    	# If no image or force_pull and you're not in dev mode, then pull
+
         _DOCKER_PULL_CACHE=".erisyon_do_docker_pull_cache"
         if [[ "${FORCE_PULL}" == "1" ]]; then
             rm -f "${_DOCKER_PULL_CACHE}"
         fi
 
         if cache_expired "${_DOCKER_PULL_CACHE}" 10; then
-            info "Pulling ${_IMAGE} (This may take up to ten minutes)"
-            docker pull $_IMAGE 2> /dev/null
+            info "Pulling ${IMAGE} (This may take up to ten minutes)"
+            docker pull $IMAGE 2> /dev/null
             if [[ $? -ne 0 ]]; then
                 error "Docker pull failed."
             fi
@@ -573,7 +558,7 @@ main() {
         --volume ${_RUNTMP}/passwd:/etc/passwd:ro \
         --volume ${_RUNTMP}/group:/etc/group:ro \
         --volume ${_RUNTMP}/bash_file.sh:${_RUNTMP}/bash_file.sh:ro \
-        --volume ${_JOBS_FOLDER}:${JOBS_FOLDER_MOUNT}:rw \
+        --volume ${HOST_JOBS_FOLDER}:${HOST_JOBS_FOLDER}:rw \
         --volume ${SSH_KEYS}:/root/.ssh:ro \
         --volume ${SSH_KEYS}/known_hosts:/root/.ssh/known_hosts:rw \
         --volume ${ERISYON_TMP}:${ERISYON_TMP}:rw \
@@ -586,8 +571,8 @@ main() {
         --env ERISYON_DOCKER_ENV=1 \
         --env ERISYON_HEADLESS=${ERISYON_HEADLESS} \
         --env ERISYON_TMP=${ERISYON_TMP} \
-        --env HOST_DOCKER_TAG=${HOST_DOCKER_TAG} \
-        --env HOST_JOBS_FOLDER=${_JOBS_FOLDER} \
+        --env IMAGE=${IMAGE} \
+        --env HOST_JOBS_FOLDER=${HOST_JOBS_FOLDER} \
         --env HOME=/root \
         --env PROF=${PROF} \
         --env DEBUG=${DEBUG} \
@@ -606,12 +591,11 @@ main() {
         --group-add 101 \
         --group-add 0 \
         ${EXTRA_DOCKER_ARGS} \
-        $_IMAGE \
+        $IMAGE \
     "
 
     prof $LINENO
 
-    debug "HOST_JOBS_FOLDER=$_JOBS_FOLDER"
     debug "DOCKER_ARGS=$DOCKER_ARGS"
     for word in $DOCKER_ARGS; do
     	debug $word

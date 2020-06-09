@@ -12,11 +12,11 @@ def get_user():
 
 
 def jobs_folder():
-    return local.path(local.env["ERISYON_ROOT"]) / "jobs_folder"
+    return local.path(local.env["HOST_JOBS_FOLDER"])
 
 
 def jobs_folder_as_str():
-    return str(local.path(local.env["ERISYON_ROOT"]) / "jobs_folder")
+    return str(jobs_folder())
 
 
 def validate_job_folder(job_folder, allow_run_folders=False):

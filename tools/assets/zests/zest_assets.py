@@ -19,11 +19,11 @@ def zest_validate_job_folder():
         run1.mkdir()
 
     def it_accepts_folder_in_jobs_folder_by_absolute_str():
-        job = str(local.path(local.env["ERISYON_ROOT"]) / "jobs_folder" / job_name)
+        job = str(local.path(local.env["HOST_JOBS_FOLDER"]) / job_name)
         assert assets.validate_job_folder(job) == job_name
 
     def it_accepts_folder_in_jobs_folder_by_absolute_plumbum():
-        job = local.path(local.env["ERISYON_ROOT"]) / "jobs_folder" / job_name
+        job = local.path(local.env["HOST_JOBS_FOLDER"]) / job_name
         assert assets.validate_job_folder(job) == job_name
 
     def it_accepts_folder_in_jobs_folder_by_relative_string():

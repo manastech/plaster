@@ -428,10 +428,6 @@ class GenFuncs:
             folder.mkdir()
             RunExecutor(folder, tasks=run).save()
 
-            if local.env.get("HOST_DOCKER_TAG") is not None:
-                # When inside of docker the /erisyon/plaster folder is confusing
-                folder = folder.replace("/erisyon/plaster/", "./")
-
             info(f"Wrote run to {folder}")
 
 

@@ -31,8 +31,6 @@ class CommandError(Exception):
 
 class DoFuncs:
     def is_dev(self):
-        # HOST_DOCKER_TAG gets set when the current process was launched
-        # inside a container via "p"
         return local.env.get("ERISYON_DEV") == "1"
 
     def folder_user(self):
@@ -40,17 +38,6 @@ class DoFuncs:
 
     def run_user(self):
         return local.env["RUN_USER"]
-
-    def get_host_container_or_user_tag(self):
-        if self.is_dev():
-            tag = local.env["RUN_USER"]
-        else:
-            # If this is set it is because it came from the p script
-            # setting it and then launching current sub-process
-            tag = local.env["HOST_DOCKER_TAG"]
-
-        assert tag != ""
-        return tag
 
     def assert_env(self):
         must_exist = ("ERISYON_ROOT", "ERISYON_HEADLESS")
@@ -228,36 +215,6 @@ class TestCommand(cli.Application, DoFuncs):
             )
 
 
-@DoCommand.subcommand("unit")
-class ZestUnitCommand(cli.Application, DoFuncs):
-    def main(self, *args):
-        self.assert_env()
-        self.clear()
-        match_string = safe_list_get(args, 0)
-
-        try:
-            with Context(debug_mode=True):
-                return self.run_zests(match_string=match_string, run_groups="unit")
-        except SyntaxError:
-            raise
-        except Exception as e:
-            raise
-
-
-@DoCommand.subcommand("black")
-class BlackCommand(cli.Application, DoFuncs):
-    def main(self, path=None):
-        self.assert_env()
-        self.run_black(path)
-
-
-@DoCommand.subcommand("nbstripout")
-class NbstripoutCommand(cli.Application, DoFuncs):
-    def main(self):
-        self.assert_env()
-        self.run_nbstripout()
-
-
 @DoCommand.subcommand("jupyter")
 class JupyterCommand(cli.Application, DoFuncs):
     ip = cli.SwitchAttr("--ip", str, default="0.0.0.0", help="ip to bind to")
@@ -274,37 +231,6 @@ class JupyterCommand(cli.Application, DoFuncs):
             "--allow-root",
             *args,
         )
-
-
-@DoCommand.subcommand("blastp")
-class BlastpCommand(cli.Application, DoFuncs):
-    def main(self, uniprot_proteome_id, pepstr):
-        assert uniprot_proteome_id.startswith("UP")
-
-        self.assert_env()
-        self.clear()
-
-        important(f"Downloading {uniprot_proteome_id}")
-        proteome = uniprot.get_proteome(uniprot_proteome_id)
-        proteome_fasta_path = f"{uniprot_proteome_id}.fasta"
-        save(proteome_fasta_path, proteome)
-
-        important("Making database of proteome")
-        local["makeblastdb"]["-in", proteome_fasta_path, "-dbtype", "prot"] & FG
-
-        pep_fasta = f">mysearch\n{pepstr}\v"
-        peptide_fasta_path = "peptide.fasta"
-        save(peptide_fasta_path, pep_fasta)
-
-        important("Blasting proteome")
-        local["blastp"][
-            "-query",
-            peptide_fasta_path,
-            "-db",
-            proteome_fasta_path,
-            "-outfmt",
-            "7 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore",
-        ] & FG
 
 
 if __name__ == "__main__":

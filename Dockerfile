@@ -42,6 +42,9 @@ RUN PIPENV_VENV_IN_PROJECT=1 pipenv sync --python /usr/bin/python
 
 FROM base-image AS final-image
 
+WORKDIR /erisyon
+RUN echo "This file is a sentinel to mark that this is the erisyon root source folder" > ./erisyon_root
+
 WORKDIR /erisyon/plaster
 
 COPY --from=pip-image /venv/.venv /venv/.venv
