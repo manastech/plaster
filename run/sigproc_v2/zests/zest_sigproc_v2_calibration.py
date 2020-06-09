@@ -6,7 +6,7 @@ from plaster.run.sigproc_v2.sigproc_v2_params import SigprocV2Params
 from plaster.tools.calibration.calibration import Calibration
 from plaster.tools.log.log import debug
 
-
+@zest.skip("n", "Not ready")
 @zest.group("integration")
 def zest_sigproc_v2_calibration():
     """

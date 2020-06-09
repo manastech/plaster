@@ -18,18 +18,20 @@ class SimParams(Params):
         n_pres=1,
         n_mocks=0,
         n_edmans=1,
-        n_samples_train=10000,
-        n_samples_test=1000,
+        n_samples_train=5_000,
+        n_samples_test=1_000,
         dyes=[],
         labels=[],
         random_seed=None,
         train_n_sample_multiplier=None,  # This does not appear to be used anywhere. tfb
         allow_train_test_to_be_identical=False,
         enable_ptm_labels=False,
+        is_survey=False,
     )
 
     schema = s(
         s.is_kws_r(
+            is_survey=s.is_bool(),
             error_model=s.is_kws(**ErrorModel.schema.schema()),
             n_pres=s.is_int(bounds=(0, None)),
             n_mocks=s.is_int(bounds=(0, None)),

@@ -79,13 +79,13 @@ def help_template(generators):
     return utils.smart_wrap(
         f"""
         PGEN -- The plaster run generator
-        
+
         VERSION: {VERSION}
         TASK: License, version, etc.
-        
+
         Usage
         ------------------------------------------------------------------------------
-        gen <GENERATOR> <SWITCHES>  
+        gen <GENERATOR> <SWITCHES>
 
         Example Usage:
         --------------
@@ -95,37 +95,37 @@ def help_template(generators):
                 --label_set='DE,C' \\
                 --job=example \\
                 --sample=insulin
-        
+
         #SWITCHES
         ===============================================================================
         @--job='./my_run'                             # (See: GENERATORS)
         @--sample='a modified protein'                # (See: GENERATORS)
-        
+
         Protein import (All are Repeatable; 1+ Required)...
         ------------------------------------------------------------------------------
-        @--protein_fasta='local.fasta'                # Local file (See: FASTA) 
+        @--protein_fasta='local.fasta'                # Local file (See: FASTA)
         ^--protein_fasta='http://a.com/a.fasta'       # URL of same
         @--protein_csv='//jobs_folder/local.csv'     # Local-file (See: CSV)
         @--protein_csv='http://a.com/a.csv'           # URL of same
         @--protein_csv='s3://bucket/folder/a.csv'     # S3 source of same
-        @--protein_seq='Insulin:MALWMRLLPLL'          # Sequence in-line (See SEQS)  
+        @--protein_seq='Insulin:MALWMRLLPLL'          # Sequence in-line (See SEQS)
         @--protein_uniprot='P01308'                   # Lookup by Uniprot AC
         @--protein_uniprot='Insulin:P01308'           # Lookup AC and change name
         ^
-        
+
         Protein options (All are Repeatable; All Optional)...
         ------------------------------------------------------------------------------
-        @--protein_random=N                           # Of proteins added, pick N 
+        @--protein_random=N                           # Of proteins added, pick N
         @--protein_of_interest='P10636-8'             # Affects classify reporting
         ^--protein_exclude='MyName2'                  # Exclude name
-        ^--protein_abundance='P37840-1:10000.0'       # Specify abundance by name  
+        ^--protein_abundance='P37840-1:10000.0'       # Specify abundance by name
         ^--protein_abundance-csv='some.csv'           # Specify abundance (See: CSV)
-        ^--protein_abundance-csv='http://a.com/a.csv' # URL of same 
-        
-        
+        ^--protein_abundance-csv='http://a.com/a.csv' # URL of same
+
+
         Common Generator Switches: (See: GENERATORS)...
         ------------------------------------------------------------------------------
-        @--label_set='DE,Y,C,K:2+S'                   # Repeatable (See: LABELS) 
+        @--label_set='DE,Y,C,K:2+S'                   # Repeatable (See: LABELS)
         @--protease='trypsin'                         # Repeatable (See: PROTEASES)
         @--n_edmans=10                                # Edman cycles (See: LABELS)
         @--n_pres=1                                   # default: 1 (See: LABELS)
@@ -138,9 +138,9 @@ def help_template(generators):
         ------------------------------------------------------------------------------
         @--err_p_edman_failure=0.06                   # Edman miss
         @--err_p_detach=0.05                          # Surface detach
-        
+
                                                       # The following probabilities
-                                                      # are specified per-dye like: 
+                                                      # are specified per-dye like:
                                                       # "dye|prob" where dye count
                                                       # starts at zero.
         @--err_dye_beta=0|7500                        # Brightness
@@ -168,7 +168,7 @@ def help_template(generators):
         @--peak_find_n_cycles                         # [1,ncycles] default: 4
         @--peak_find_start                            # [0,ncycles-1] default: 0
         @--radial_filter                              # [0,1.0] or default: None
-        
+
         Less-frequently used switches...
         ------------------------------------------------------------------------------
         @--cache_folder='...'                         # default:
@@ -178,23 +178,23 @@ def help_template(generators):
         @--run_name='a'                               # Force run name (danger)
         @--prop='a.b=1=int'                           # Modify a property (danger)
         @--skip_report                                # Do not gen. report
-        
+
         #GENERATORS & JOBS & SAMPLES
         ===============================================================================
         Generators are a mode under which this script creates job
         instructions.  All executions of this script require a generator
         be specified in the first argument.
-        
+
         Generators emit "JOBS" into Job folders as named with the --job=
         switch into the ./jobs_folder folder. Note that ./jobs_folder might be
         a sym-link to somewhere else.
-        
+
         Current generators are:
             {colors.yellow|generators}
-        
+
         Each Generator may require specific switches which may be
         enumerate with "gen <GENNAME> --help"
-        
+
         When a Generator is not given a required input, it will ask for it manually.
 
         Generators may choose to emit more than one RUN into the job folder
@@ -216,32 +216,32 @@ def help_template(generators):
 
         Be careful when you use the iterators as the number of permutations
         can grow extremely quickly and thus generate a very large number of runs.
-        
+
         #URLs
         ===============================================================================
         Any switch which accepts a file will also accept an http, https, or s3 URL.
-        
+
         #FASTA
         ===============================================================================
         .fasta files should be in the Uniprot form.
         See https://www.uniprot.org/help/fasta-headers
-        
+
         #CSV
         ===============================================================================
         .csv files require a mandatory single line header as follows in any order:
             Name, Seq, Abundance, UniprotAC, PTM, POI
-        
+
         If UniprotAC is given the Seq will be filled from the UniprotAC.
         If UniprotAC is given but Name isn't, it will use the AC as the Name.
         Abundance is optional. In the case that the abundance alone is given
         then it can be used to assign abundances
         to proteins that were imported in the --protein_* commands.
         PTM is optional.  It is a semi-colon-separate list of 1-based aa-locations
-        at which PTM can be performed (e.g. phosphorylation).   
-        POI is optional and contains a 0 or a 1. Used to specify "proteins of interest" 
-        
-        Quoted and un-quoted fields are legal and columns are separated by commas. 
-              
+        at which PTM can be performed (e.g. phosphorylation).
+        POI is optional and contains a 0 or a 1. Used to specify "proteins of interest"
+
+        Quoted and un-quoted fields are legal and columns are separated by commas.
+
         #SEQS
         ===============================================================================
         Protein and peptide sequences are specified in IUPAC; N to C order.
@@ -249,42 +249,42 @@ def help_template(generators):
 
         Special rules:
             * Whitespace is ignored
-                "AB CD" = "ABCD" 
+                "AB CD" = "ABCD"
             * "." can be used in place of "X"
                 "AB..CD" = "ABXXCD"
             * Anything wrapped in () is dropped.
                 "AB(a comment)CD" = "ABCD"
             * Square brackets are modifications of the previous amino-acid,
               usually used to indicate a Post-Translational-Modification (PTM)
-                "AS[p]D" = "A" + "S[p]" + "D" 
+                "AS[p]D" = "A" + "S[p]" + "D"
             * Curly brackets are reserved for future use
-        
+
         #LABELS
         ===============================================================================
         Examples:
           "C,K"           = Label C in channel 0, K in ch. 1.
-          "DE,C,K"        = Label D and E in channel 0, C in ch. 1, K in ch. 2. 
-          "DE,C,K: 2"     = Choose all 2 label permutations, eg: (DE,C) (DE,K) (C,K) 
+          "DE,C,K"        = Label D and E in channel 0, C in ch. 1, K in ch. 2.
+          "DE,C,K: 2"     = Choose all 2 label permutations, eg: (DE,C) (DE,K) (C,K)
           "DE,C,K: 2+S,T" = Choose all 2 label permutations and add label(s)
-                            e.g. (DE,C,S,T) (DE,K,S,T) (C,K,S,T) 
-          "DE,C[p]"       = Label D and E in channel 0, and phospho C in ch. 1. 
-        
+                            e.g. (DE,C,S,T) (DE,K,S,T) (C,K,S,T)
+          "DE,C[p]"       = Label D and E in channel 0, and phospho C in ch. 1.
+
         Peptides are degraded by Edman degradation one amino acid at at time
         from the N-terminus. When a labelled amino-acid is cleaved the loss in
         fluorescence is what guides identification. The --n_edmans=X parameter
         specifies the number of Edman cycles. More cycles will sequence deeper into
         the peptides but also adds more time to the experiment.
-        
+
         #PROTEASES
         ===============================================================================
         Proteolyze the proteins and any decoys with one or more of:
             {colors.yellow|", ".join(list(protease_dict.keys())[0:5])}
             {colors.yellow|", ".join(list(protease_dict.keys())[5:])}
-        
+
         You may also proteolyze with more than one protease simultaneously using the
         syntax e.g. --protease=lysc+endopro
 
-        
+
         #DECOYS
         ===============================================================================
         Decoys are protein sequences which are expected to *not* be present
@@ -295,7 +295,7 @@ def help_template(generators):
         Option available for decoy are:
             "none", "reverse", "shuffle"
         These options are applied before proteolysis.
-        
+
         #SIGPROC
         ===============================================================================
         When one or more --sigproc_source= are given, the data from an instrument
@@ -304,13 +304,13 @@ def help_template(generators):
         #LNFIT
         ===============================================================================
         When one or more --lnfit_params are given, lnfit tasks will be executed on each
-        sigproc_source dataset.  The --lnfit_params string specified will be passed 
-        directly to the pflib lnfit routine. 
-        
+        sigproc_source dataset.  The --lnfit_params string specified will be passed
+        directly to the pflib lnfit routine.
+
         The --lnfit_dye_on_threshold parameter is used to convert sigproc intensities
         at each cycle to the "ON/OFF" track_photometries.csv input format required by
-        pflib's lnfit routine.  An intensity above this threshold is considered "ON".  
-        
+        pflib's lnfit routine.  An intensity above this threshold is considered "ON".
+
         You may specifiy a single --lnfit_dye_on_threshold to be used for all lnfit
         tasks, or specifiy a separate threshold for each.
 
@@ -450,6 +450,10 @@ class GenApp(cli.Application, GenFuncs):
 
     sample = cli.SwitchAttr(
         ["--sample"], str, help="Human-readable description of the biological sample"
+    )
+
+    jobs_folder = cli.SwitchAttr(
+        ["--jobs_folder"], str, help="Location of jobs folder", default="./jobs_folder",
     )
 
     cache_folder = cli.SwitchAttr(
@@ -646,7 +650,7 @@ class GenApp(cli.Application, GenFuncs):
             raise ValidationError(
                 "job should be a symbol (a-z, 0-9, and _) are allowed."
             )
-        job_folder = local.path("./jobs_folder") / self.job
+        job_folder = local.path(self.jobs_folder) / self.job
 
         delete_job = False
         if self.overwrite:
@@ -730,7 +734,6 @@ class GenApp(cli.Application, GenFuncs):
             assert len(self.derived_vals.protein) == self.protein_random
 
         for arg_name, arg_type, arg_help, arg_userdata in requirements:
-
             if (
                 arg_name in self.derived_vals
                 and self.derived_vals.get(arg_name) is not None

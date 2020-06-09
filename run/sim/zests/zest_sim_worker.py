@@ -595,4 +595,18 @@ def zest_sim():
 
         zest()
 
+    def it_surveys():
+        n_samples = 1
+        sim_params = _stub_sim_params(some_error_model, n_samples)
+        sim_params.is_survey = True
+        sim_params.n_samples_train = n_samples
+        sim_params.n_samples_test = None
+        sim_result = sim_worker.sim(sim_params, prep_result)
+        assert sim_result.train_dyemat.shape == (
+            # -1 is because the nul is all-dark and thus dropped.
+            n_samples * (n_peptides - 1),
+            n_channels * n_cycles,
+        )
+        assert sim_result.test_dyemat is None
+
     zest()

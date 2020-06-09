@@ -5,14 +5,14 @@ from plaster.tools.schema.schema import Schema as s, Params
 class TestNNParams(Params):
     defaults = Munch(
         include_training_set=False,
-        n_neighbors=12,
+        n_neighbors=8,
         dt_score_mode="gmm_normalized_wpdf_dist_sigma",
         dt_score_metric="",
         dt_score_bias=0.1,
         dt_filter_threshold=0,
         rare_penalty=0.8,
         penalty_coefs=None,
-        radius=30.0,
+        radius=15.0,
     )
 
     schema = s(

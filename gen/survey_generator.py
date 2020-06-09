@@ -73,6 +73,7 @@ class SurveyGenerator(BaseGenerator):
                 proteins_of_interest=self.protein_of_interest,
                 n_ptms_limit=self.n_ptms_limit,
             )
+
             sim_task = task_templates.sim(
                 list(aa_list),
                 err_set,
@@ -81,6 +82,7 @@ class SurveyGenerator(BaseGenerator):
                 n_edmans=self.n_edmans,
                 n_samples_train=1,
                 n_samples_test=1,
+                is_survey=True,
             )
             sim_task.sim.parameters.random_seed = self.random_seed
             # note: same seed is used to generate decoys

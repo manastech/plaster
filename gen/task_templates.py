@@ -123,14 +123,14 @@ def prep(
     )
 
 
-def sim(aa_list, err_set, **prep_kws):
+def sim(aa_list, err_set, **sim_kws):
     if isinstance(err_set, ErrorModel):
         error_model = err_set
     else:
         error_model = ErrorModel.from_err_set(err_set)
-    assert prep_kws.get("n_edmans", 0) > 1
-    n_pres = prep_kws.get("n_pres", 0)
-    n_mocks = prep_kws.get("n_mocks", 0)
+    assert sim_kws.get("n_edmans", 0) > 1
+    n_pres = sim_kws.get("n_pres", 0)
+    n_mocks = sim_kws.get("n_mocks", 0)
     assert (
         n_pres + n_mocks >= 1
     ), "You must include at least 1 pre or mock cycle to capture the initial image"
@@ -140,7 +140,7 @@ def sim(aa_list, err_set, **prep_kws):
             inputs=Munch(prep="../prep"),
             parameters=Munch(
                 **SimParams.construct_from_aa_list(
-                    aa_list, error_model=error_model, include_dfs=False, **prep_kws
+                    aa_list, error_model=error_model, include_dfs=False, **sim_kws
                 )
             ),
         )

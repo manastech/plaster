@@ -1,8 +1,8 @@
-import pandas as pd
 from plaster.tools.pipeline.pipeline import PipelineTask
 from plaster.run.prep.prep_result import PrepResult
 from plaster.run.sim.sim_params import SimParams
 from plaster.run.sim.sim_worker import sim
+from plaster.tools.log.log import debug
 
 
 class SimTask(PipelineTask):

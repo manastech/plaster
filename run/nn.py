@@ -164,8 +164,6 @@ def _do_nn_and_gmm(
         that all previous run results were wrong so I'm concerned how that was getting
         results that were as good as RF?
     """
-    include_debug = True
-
     check.array_t(dt_mat, ndim=3)
     n_dts, n_channels, n_cycles = dt_mat.shape
     check.array_t(dt_inv_var_mat, shape=dt_mat.shape)
@@ -175,11 +173,18 @@ def _do_nn_and_gmm(
     n_cols = n_channels * n_cycles
     unit_radmat_row_flat = unit_radrow.reshape((n_cols,))
 
+    # true_dt_i is found by use the "dyerow" which is really a cheat
+    # since dyerow is oly something we know in simulated data.
+    # There is no guarantee that the training set has every row
+    # that is represented by the test set. Thus the "true_dt_i"
+    # might not be found. We find it by using the _get_neighbor_iz
+    # with a tiny radius because if the test dyetrack is found
+    # among the targets it should be right on top of its target.
     true_dt_i = _get_neighbor_iz(
         flann,
         dyerow.reshape((n_cols,)),
         n_neighbors=n_neighbors,
-        radius=radius,
+        radius=0.01,
         default=0,
     )[0]
 
@@ -187,20 +192,6 @@ def _do_nn_and_gmm(
         flann, unit_radmat_row_flat, n_neighbors=n_neighbors, radius=radius, default=0
     )
     nn_iz = nn_iz[nn_iz > 0]
-    # n_neigh_found = np.sum(nn_iz > 0)
-
-    debug_info = tuple()
-
-    if include_debug:
-        # _nn_iz = np.full((n_neighbors,), 0.0)
-        _neigh_weights = np.full((n_neighbors,), 0.0)
-        _scores = np.full((n_neighbors,), 0.0)
-        # _dist = np.full((n_neighbors,), 1e6)
-        # _vdist = np.full((n_neighbors,), 1e6)
-        # _pdf = np.full((n_neighbors,), 0.0)
-        # _wpdf = np.full((n_neighbors,), 0.0)
-        # _normalized_wpdf = np.full((n_neighbors,), 0.0)
-        _arg_sort = np.full((n_neighbors,), -1)
 
     # FILTER any low-weight dyetracks
     sufficient_weight_mask = dt_weights[nn_iz] >= dt_filter_threshold
@@ -212,6 +203,7 @@ def _do_nn_and_gmm(
         neigh_dt_mat = dt_mat[nn_iz].reshape((n_neigh_found, n_cols))
         neigh_dt_inv_var = dt_inv_var_mat[nn_iz].reshape((n_neigh_found, n_cols))
         neigh_weights = dt_weights[nn_iz]
+        vdist = np.zeros_like(neigh_dt_inv_var)
 
         def cd():
             return distance.cdist(
@@ -316,9 +308,9 @@ def _do_nn_and_gmm(
             """
             delta = unit_radmat_row_flat - neigh_dt_mat
             vdist = np.sum(delta * neigh_dt_inv_var * delta, axis=1)
-            Sigma = 1.0 / neigh_dt_inv_var
-            determinant_of_Sigma = np.prod(Sigma, axis=1)
-            pdf = determinant_of_Sigma ** (-1 / 2) * np.exp(-vdist / 2)
+            sigma = 1.0 / neigh_dt_inv_var
+            determinant_of_sigma = np.prod(sigma, axis=1)
+            pdf = determinant_of_sigma ** (-1 / 2) * np.exp(-vdist / 2)
             weighted_pdf = neigh_weights * pdf
             scores = utils.np_safe_divide(weighted_pdf, weighted_pdf.sum())
 
@@ -366,41 +358,18 @@ def _do_nn_and_gmm(
         best_arg = arg_sort[0].astype(int)
         pred_dt_i = int(nn_iz[best_arg])
         pred_dt_score = scores[best_arg]
-
-        if include_debug:
-            # _nn_iz[0:n_neigh_found] = nn_iz[0:n_neigh_found]
-            _neigh_weights[0:n_neigh_found] = neigh_weights[0:n_neigh_found]
-            _scores[0:n_neigh_found] = scores[0:n_neigh_found]
-            # _dist[0:n_neigh_found] = dist[0:n_neigh_found]
-            # _vdist[0:n_neigh_found] = vdist[0:n_neigh_found]
-            # _pdf[0:n_neigh_found] = pdf[0:n_neigh_found]
-            # _wpdf[0:n_neigh_found] = wpdf[0:n_neigh_found]
-            # _normalized_wpdf[0:n_neigh_found] = normalized_wpdf[0:n_neigh_found]
-            _arg_sort[0:n_neigh_found] = arg_sort[0:n_neigh_found]
+        vdist = vdist[best_arg]
 
     else:
         pred_dt_i = 0
         pred_dt_score = 0.0
-
-    # if include_debug:
-    #     debug_info = (
-    #         # _nn_iz,
-    #         _neigh_weights,
-    #         _scores,
-    #         # _dist,
-    #         # _vdist,
-    #         # _pdf,
-    #         # _wpdf,
-    #         # _normalized_wpdf,
-    #         _arg_sort,
-    #         n_neigh_found,
-    #     )
+        vdist = 0.0
 
     return (
         np.array([true_dt_i]),
         np.array([pred_dt_i]),
         np.array([pred_dt_score]),
-        # debug_info,
+        np.array([vdist]),
     )
 
 
@@ -638,7 +607,7 @@ def _step_4_gmm_classify(
     The dyemat is passed so that we can get the true_dt_iz for debugging
     """
     check.array_t(radmat, ndim=3)
-    true_dt_iz, pred_dt_iz, scores = zap.arrays(
+    true_dt_iz, pred_dt_iz, scores, vdists = zap.arrays(
         _do_nn_and_gmm,
         dict(unit_radrow=radmat, dyerow=dyemat),
         dt_mat=dt_mat,
@@ -666,7 +635,7 @@ def _step_4_gmm_classify(
     scores = scores.flatten()
     scores /= np.max(scores)
 
-    return true_dt_iz.flatten(), pred_dt_iz.flatten(), scores
+    return true_dt_iz.flatten(), pred_dt_iz.flatten(), scores, vdists
 
 
 def _step_5_mle_pred_dt_to_pep(pred_dt_iz, dt_scores, dt_pep_sources_df):
@@ -731,13 +700,18 @@ def nn(sim_result, dyemat, radmat, nn_params, progress=None):
     )
     n_dts = dt_mat.shape[0]
 
+    # dt_mat is the dyetrack mat of the TARGETS as build by the training set
+    # Not to be confused with dyemat which is the dyemat of the test points
+    # There is no guarantee that the dyerow of a test point is even *in*
+    # the trainging set.
+
     inv_var_dt_mat = _step_3_create_inverse_variances(
         dt_mat, np.array(sim_result.params.channel_i_to_vpd)
     )
 
     dt_weights = dyetracks_df.reindex(np.arange(n_dts), fill_value=0).weight.values
 
-    true_dt_iz, pred_dt_iz, dt_scores = _step_4_gmm_classify(
+    true_dt_iz, pred_dt_iz, dt_scores, vdists = _step_4_gmm_classify(
         unit_radmat,
         dyemat,
         dt_mat,
@@ -762,6 +736,7 @@ def nn(sim_result, dyemat, radmat, nn_params, progress=None):
     )
 
     return Munch(
+        unit_radmat=unit_radmat,  # This is really for debugging
         dt_mat=dt_mat,
         dyetracks_df=dyetracks_df,
         dt_pep_sources_df=dt_pep_sources_df,
@@ -771,5 +746,6 @@ def nn(sim_result, dyemat, radmat, nn_params, progress=None):
         pred_pep_iz=pred_pep_iz,
         pep_scores=pep_scores,
         scores=scores,
+        vdists=vdists,
         debug_info=None,
     )
