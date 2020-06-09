@@ -1,6 +1,7 @@
 apt-utils
 curl
 docker.io
+git
 jq
 libffi-dev
 libglib2.0-0
