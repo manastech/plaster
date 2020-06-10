@@ -68,7 +68,6 @@ def test_nn(test_nn_params, prep_result, sim_result, progress=None, pipeline=Non
 
     else:
         train_result = {k: None for k in test_result.keys()}
-    prof()
 
     def rename(d, prefix):
         return {f"{prefix}{k}": v for k, v in d.items()}

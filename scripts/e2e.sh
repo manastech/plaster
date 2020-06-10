@@ -74,11 +74,13 @@ test_plaster_docker_container() {
 	docker build ${_DOCKER_CACHE} -t "plaster:e2e" .
 
 	it_passes_tests() {
-		IMAGE=plaster:e2e ./plaster.sh test --no_clear
+		LIMIT_TESTS=""
+		IMAGE=plaster:e2e ./plaster.sh test "${LIMIT_TESTS}" --no_clear
 		_check_fail_test $? $LINENO
 	}
 
-	it_passes_runs_a_gen() {
+	it_gens_and_runs() {
+		rm -rf ./jobs_folder/__e2e_test
 		IMAGE=plaster:e2e ./plaster.sh gen classify \
 			--job=__e2e_test \
 			--sample=e2e_test \
@@ -87,6 +89,9 @@ test_plaster_docker_container() {
     		--n_pres=0 \
 		    --n_edmans=8 \
 		    --label_set='C'
+		_check_fail_test $? $LINENO
+
+		IMAGE=plaster:e2e ./plaster.sh run ./jobs_folder/__e2e_test
 		_check_fail_test $? $LINENO
 	}
 
@@ -128,7 +133,7 @@ test_plaster_docker_container() {
 	}
 
 	_run "it_passes_tests" || _fail_test $LINENO
-	_run "it_passes_runs_a_gen" || _fail_test $LINENO
+	_run "it_gens_and_runs" || _fail_test $LINENO
 	_run "it_starts_plaster_container_as_non_dev" || _fail_test $LINENO
 	_run "it_starts_plaster_container_as_dev" || _fail_test $LINENO
 	_run "it_runs_jupyter" || _fail_test $LINENO

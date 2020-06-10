@@ -45,7 +45,7 @@ Notes
 import sys
 import re
 from munch import Munch
-from plumbum import cli, local, colors
+from plumbum import cli, local, colors, FG
 from plaster.tools.log.log import (
     error,
     important,
@@ -710,70 +710,72 @@ class GenApp(cli.Application, GenFuncs):
         if self.construct_fail:
             return
 
-        job_folder = self.validate_job_name_and_folder()
+        with local.cwd("/erisyon"):
+            assert local.path("erisyon_root").exists()
+            job_folder = self.validate_job_name_and_folder()
 
-        schema = self.generator_klass.schema
-        defaults = self.generator_klass.defaults
+            schema = self.generator_klass.schema
+            defaults = self.generator_klass.defaults
 
-        requirements = schema.requirements()
-        # APPLY defaults and then ask user for any elements that are not declared
-        generator_args = {}
-        switches = self._switches_by_name
+            requirements = schema.requirements()
+            # APPLY defaults and then ask user for any elements that are not declared
+            generator_args = {}
+            switches = self._switches_by_name
 
-        if self.protein_random is not None:
-            info(f"Sampling {self.protein_random} random proteins from imported set")
-            n = len(self.derived_vals.protein)
-            assert n >= self.protein_random
-            self.derived_vals.protein = data.subsample(
-                self.derived_vals.protein, self.protein_random
+            if self.protein_random is not None:
+                info(f"Sampling {self.protein_random} random proteins from imported set")
+                n = len(self.derived_vals.protein)
+                assert n >= self.protein_random
+                self.derived_vals.protein = data.subsample(
+                    self.derived_vals.protein, self.protein_random
+                )
+                assert len(self.derived_vals.protein) == self.protein_random
+
+            for arg_name, arg_type, arg_help, arg_userdata in requirements:
+                if (
+                    arg_name in self.derived_vals
+                    and self.derived_vals.get(arg_name) is not None
+                ):
+                    # Load from a derived switch (eg: protein)
+                    generator_args[arg_name] = self.derived_vals[arg_name]
+                elif arg_name in switches and switches.get(arg_name) is not None:
+                    # Load from a switch
+                    generator_args[arg_name] = getattr(self, arg_name)
+                else:
+                    # If the schema allows the user to enter manually
+                    if arg_userdata.get("allowed_to_be_entered_manually"):
+                        generator_args[arg_name] = self._request_field_from_user(
+                            arg_name, arg_type, default=defaults.get(arg_name)
+                        )
+
+            # Intentionally run the generate before the job folder is written
+            # so that if generate fails it doesn't leave around a partial job.
+            try:
+                generator_args["force_run_name"] = self.run_name
+                generator = self.generator_klass(**generator_args)
+                run_descs = generator.generate()
+            except (SchemaValidationFailed, ValidationError) as e:
+                # Emit clean failure and exit 1
+                error(str(e))
+                return 1
+
+            # WRITE the job & copy any file sources
+            self._write_runs(job_folder, run_descs, props=self.prop)
+            (job_folder / "_gen_sources").delete()
+            self.local_sources_tmp_folder.move(job_folder / "_gen_sources")
+
+            if not self.skip_report:
+                report = generator.report_assemble()
+                utils.json_save(job_folder / "report.ipynb", report)
+
+            utils.yaml_write(
+                job_folder / "job_manifest.yaml",
+                uuid=self.job_uuid,
+                localtime=time.strftime("%Y-%m-%d, %H:%M:%S", time.localtime()),
+                # Note: it seems localtime inside our container is UTC
+                who=local.env.get("RUN_USER", "Unknown"),
+                cmdline_args=sys.argv,
             )
-            assert len(self.derived_vals.protein) == self.protein_random
-
-        for arg_name, arg_type, arg_help, arg_userdata in requirements:
-            if (
-                arg_name in self.derived_vals
-                and self.derived_vals.get(arg_name) is not None
-            ):
-                # Load from a derived switch (eg: protein)
-                generator_args[arg_name] = self.derived_vals[arg_name]
-            elif arg_name in switches and switches.get(arg_name) is not None:
-                # Load from a switch
-                generator_args[arg_name] = getattr(self, arg_name)
-            else:
-                # If the schema allows the user to enter manually
-                if arg_userdata.get("allowed_to_be_entered_manually"):
-                    generator_args[arg_name] = self._request_field_from_user(
-                        arg_name, arg_type, default=defaults.get(arg_name)
-                    )
-
-        # Intentionally run the generate before the job folder is written
-        # so that if generate fails it doesn't leave around a partial job.
-        try:
-            generator_args["force_run_name"] = self.run_name
-            generator = self.generator_klass(**generator_args)
-            run_descs = generator.generate()
-        except (SchemaValidationFailed, ValidationError) as e:
-            # Emit clean failure and exit 1
-            error(str(e))
-            return 1
-
-        # WRITE the job & copy any file sources
-        self._write_runs(job_folder, run_descs, props=self.prop)
-        (job_folder / "_gen_sources").delete()
-        self.local_sources_tmp_folder.move(job_folder / "_gen_sources")
-
-        if not self.skip_report:
-            report = generator.report_assemble()
-            utils.json_save(job_folder / "report.ipynb", report)
-
-        utils.yaml_write(
-            job_folder / "job_manifest.yaml",
-            uuid=self.job_uuid,
-            localtime=time.strftime("%Y-%m-%d, %H:%M:%S", time.localtime()),
-            # Note: it seems localtime inside our container is UTC
-            who=local.env.get("RUN_USER", "Unknown"),
-            cmdline_args=sys.argv,
-        ),
 
 
 if __name__ == "__main__":
