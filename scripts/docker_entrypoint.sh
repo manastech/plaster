@@ -167,7 +167,6 @@ fi
 _CMD="$1"
 shift
 ARGS=( "${@}" )
-echo "ARGS=${ARGS}"
 case ${_CMD} in
     shell)
         # INTERACTIVE shell, must be run in ERISYON_HEADLESS=0

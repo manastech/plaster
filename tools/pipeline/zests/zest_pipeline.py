@@ -266,7 +266,7 @@ def zest_Pipeline_calls():
 
     def _before():
         nonlocal src_dir, dst_dir, tasks
-        src_dir = local.path("./test_pipeline")
+        src_dir = local.path("/tmp/test_pipeline")
         dst_dir = src_dir / "output"
         src_dir.delete()
         dst_dir.delete()

@@ -559,6 +559,8 @@ main() {
         --volume ${_RUNTMP}/group:/etc/group:ro \
         --volume ${_RUNTMP}/bash_file.sh:${_RUNTMP}/bash_file.sh:ro \
         --volume ${HOST_JOBS_FOLDER}:${HOST_JOBS_FOLDER}:rw \
+        --volume ${HOST_JOBS_FOLDER}:/erisyon/jobs_folder:rw \
+        --volume ${HOST_JOBS_FOLDER}:/erisyon/plaster/jobs_folder:rw \
         --volume ${SSH_KEYS}:/root/.ssh:ro \
         --volume ${SSH_KEYS}/known_hosts:/root/.ssh/known_hosts:rw \
         --volume ${ERISYON_TMP}:${ERISYON_TMP}:rw \

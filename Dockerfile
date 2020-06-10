@@ -46,7 +46,6 @@ WORKDIR /erisyon
 RUN echo "This file is a sentinel to mark that this is the erisyon root source folder" > ./erisyon_root
 
 WORKDIR /erisyon/plaster
-
 COPY --from=pip-image /venv/.venv /venv/.venv
 COPY . .
 
