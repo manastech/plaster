@@ -347,6 +347,7 @@ def zest_psf_estimate():
             else:
                 assert reason[worker.PSFEstimateMaskFields.skipped_too_dark] == 1
 
+    @zest.skip("?", "Occasionally broken, needs review")
     def it_skips_too_oval():
         locs = [[64, 54], [64, 70]]
         with synth.Synth(overwrite=True, dim=(128, 128)) as s:
