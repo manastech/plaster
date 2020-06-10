@@ -326,11 +326,7 @@ main() {
     #-----------------------------------------------------------------------------------------
 
     if [[ ! -e "./jobs_folder" ]]; then
-    	error "You must have a jobs_folder sym_link to a jobs_folder in this directory"
-    fi
-
-    if [[ ! -h "./jobs_folder" ]]; then
-    	error "./jobs_folder must be a symlink"
+    	error "You must have a jobs_folder in this directory"
     fi
 
 	HOST_JOBS_FOLDER=$(readlink "./jobs_folder")
