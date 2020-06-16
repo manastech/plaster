@@ -1,26 +1,65 @@
 from zest import zest
+import numpy as np
+import pandas as pd
+from plaster.run.prep.prep_result import PrepResult
+from plaster.run.prep.prep_params import PrepParams
 
 # Hint: use stub_prep_result
 
-@zest.skip("m", "Manas")
+# @zest.skip("m", "Manas")
 def zest_PrepResult():
 
     def pros():
+        result = None
+        default_params = None
+        params_with_abundance = None
+
+        def _before():
+            nonlocal result, default_params, params_with_abundance
+
+            default_params = PrepParams(proteins=[
+                dict(name="id_0", sequence="ABC"),
+                dict(name="id_1", sequence="CCE"),
+                dict(name="id_2", sequence="AAB"),
+            ])
+
+            params_with_abundance = PrepParams(proteins=[
+                dict(name="id_0", sequence="ABC", abundance=2),
+                dict(name="id_1", sequence="CCE"),
+                dict(name="id_2", sequence="AAB", abundance=1),
+            ])
+
+            result = PrepResult.stub_prep_result(
+                pros=[".", "ABCDEFGHI", "DDD"],
+                pro_is_decoys=[False, False, True],
+                peps=[".", "AAA", "DDD"],
+                pep_pro_iz=[0, 1, 2],
+            )
+
+            result.params = default_params
 
         def it_gets_a_dataframe_with_pro_id_index():
-            raise NotImplementedError
+            pros = result.pros()
+            assert isinstance(pros, pd.DataFrame)
+            assert "pro_id" in pros.columns
 
         def it_includes_abundances_if_in_params_proteins():
-            raise NotImplementedError
+            assert "abundance" not in result.pros().columns
+            result.params = params_with_abundance
+            assert "abundance" in result.pros().columns
 
         def it_gets_n_pros():
-            raise NotImplementedError
+            assert result.n_pros == 3
 
         def it_gets_pros_abundance():
-            raise NotImplementedError
+            result.params = params_with_abundance
+            pros_abundance = result.pros_abundance()
+            assert len(pros_abundance) == result.n_pros
 
             def it_converts_nans_to_zero():
-                raise NotImplementedError
+                nonlocal pros_abundance
+                assert np.any([np.isnan(x) for x in result.pros().abundance])
+                assert np.all([not np.isnan(x) for x in pros_abundance])
 
             zest()
 
