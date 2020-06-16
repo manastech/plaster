@@ -1,4 +1,5 @@
 from collections import defaultdict
+import itertools
 import pandas as pd
 import numpy as np
 from plaster.tools.aaseq.aaseq import aa_str_to_list
@@ -283,14 +284,20 @@ class PrepResult(BaseResult):
             return "PrepResult"
 
     @classmethod
-    def stub_prep_result(cls, pros, pro_is_decoys, peps, pep_pro_iz):
+    def stub_prep_result(cls, pros, pro_is_decoys, peps, pep_pro_iz, pro_ptm_locs=[]):
         """
         Make a test stub given a list of pro and pep strings
         """
         _pros = pd.DataFrame(
             [
-                (f"id_{i}", is_decoy, i, "", 0)
-                for i, (_, is_decoy) in enumerate(zip(pros, pro_is_decoys))
+                (f"id_{i}", is_decoy, i, ptm_locs or "", 0)
+                for i, (_, is_decoy, ptm_locs) in enumerate(
+                    zip(
+                        pros,
+                        pro_is_decoys,
+                        itertools.chain(pro_ptm_locs, itertools.repeat("")),
+                    )
+                )
             ],
             columns=PrepResult.pros_columns,
         )
