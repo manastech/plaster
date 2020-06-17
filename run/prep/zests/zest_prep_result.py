@@ -97,22 +97,41 @@ def zest_PrepResult():
 
         zest()
 
-    @zest.skip("m", "Manas")
     def pros_of_interest():
+        result = None
+
+        def _before():
+            nonlocal result
+            result = PrepResult.stub_prep_result(
+                pros=["ABCD", "AACB"],
+                pro_is_decoys=[False, False],
+                peps=["AA", "AB"],
+                pep_pro_iz=[1,0]
+            )
+            result.params = stub_prep_params(["ABCD"])
+
         def it_sets_pros_of_interest():
-            raise NotImplementedError
+            result.set_pros_of_interest('id_0')
+            assert result.pros().set_index('pro_id').at['id_0', 'pro_report'] > 0
 
         def it_gets_n_pros_of_interest():
-            raise NotImplementedError
+            assert result.n_pros_of_interest == 0
+            result.set_pros_of_interest(['id_0', 'id_1'])
+            assert result.n_pros_of_interest == 2
 
         def it_asserts_protein_ids():
-            raise NotImplementedError
+            with zest.raises(Exception):
+                result.set_pros_of_interest('P1')
 
         def it_sets_pro_ptm_locs():
-            raise NotImplementedError
+            result.set_pro_ptm_locs('id_0', '1;3')
+            assert result.pros().set_index('pro_id').at['id_0', 'pro_ptm_locs'] == '1;3'
+            assert 'id_0' in result.pros__ptm_locs().pro_id.values
 
         def it_gets_pro_ptm_locs():
-            raise NotImplementedError
+            assert result.get_pro_ptm_locs('id_0') == ''
+            result.set_pro_ptm_locs('id_0', '1;3')
+            assert result.get_pro_ptm_locs('id_0') == '1;3'
 
         zest()
 
