@@ -1,12 +1,24 @@
 from zest import zest
+import itertools
 import numpy as np
 import pandas as pd
 from plaster.run.prep.prep_result import PrepResult
 from plaster.run.prep.prep_params import PrepParams
 
-# Hint: use stub_prep_result
 
-# @zest.skip("m", "Manas")
+def stub_prep_params(pros, pro_abundances=[]):
+    def stub_protein(i, seq, abundance):
+        pro = dict(name=f"id_{i}", sequence=seq)
+        if abundance is not None:
+            pro["abundance"] = abundance
+        return pro
+
+    proteins = [stub_protein(i, seq, abundance)
+                for i, (seq, abundance) in enumerate(itertools.zip_longest(pros, pro_abundances))]
+
+    return PrepParams(proteins=proteins)
+
+
 def zest_PrepResult():
 
     def pros():
@@ -17,23 +29,15 @@ def zest_PrepResult():
         def _before():
             nonlocal result, default_params, params_with_abundance
 
-            default_params = PrepParams(proteins=[
-                dict(name="id_0", sequence="ABC"),
-                dict(name="id_1", sequence="CCE"),
-                dict(name="id_2", sequence="AAB"),
-            ])
-
-            params_with_abundance = PrepParams(proteins=[
-                dict(name="id_0", sequence="ABC", abundance=2),
-                dict(name="id_1", sequence="CCE"),
-                dict(name="id_2", sequence="AAB", abundance=1),
-            ])
+            default_params = stub_prep_params(pros=["ABC", "CCE", "AAB"])
+            params_with_abundance = stub_prep_params(pros=["ABC", "CCE", "AAB"], pro_abundances=[2, np.nan, 1])
 
             result = PrepResult.stub_prep_result(
                 pros=[".", "ABCDEFGHI", "DDD"],
                 pro_is_decoys=[False, False, True],
-                peps=[".", "AAA", "DDD"],
-                pep_pro_iz=[0, 1, 2],
+                pro_ptm_locs=["", "2;4"],
+                peps=[".", "AAA", "CDE", "DDD"],
+                pep_pro_iz=[0, 1, 1, 2],
             )
 
             result.params = default_params
@@ -58,28 +62,42 @@ def zest_PrepResult():
 
             def it_converts_nans_to_zero():
                 nonlocal pros_abundance
-                assert np.any([np.isnan(x) for x in result.pros().abundance])
                 assert np.all([not np.isnan(x) for x in pros_abundance])
 
             zest()
 
         def it_gets_pros__ptm_locs():
-            raise NotImplementedError
+            with_ptm_locs = result.pros__ptm_locs()
+            assert len(with_ptm_locs) == 1
+            assert np.all(with_ptm_locs.pro_ptm_locs != "")
+            assert np.all(with_ptm_locs.columns == PrepResult.pros_columns)
 
         def it_gets_pros__from_decoys():
-            raise NotImplementedError
+            from_decoys = result.pros__from_decoys()
+            assert len(from_decoys) == 1
+            assert np.all(from_decoys.pro_is_decoy)
+            assert np.all(from_decoys.columns == PrepResult.pros_columns)
 
         def it_gets_pros__no_decoys():
-            raise NotImplementedError
+            no_decoys = result.pros__no_decoys()
+            assert len(no_decoys) == 2
+            assert not np.any(no_decoys.pro_is_decoy)
+            assert np.all(no_decoys.columns == PrepResult.pros_columns)
 
         def it_gets_proseqs():
-            raise NotImplementedError
+            proseqs = result.proseqs()
+            assert proseqs.query('pro_i == 1').aa.str.cat() == 'ABCDEFGHI'
+            assert np.all(proseqs.columns == PrepResult.pro_seqs_columns)
 
         def it_gets_prostrs():
-            raise NotImplementedError
+            prostrs = result.prostrs()
+            assert len(prostrs) == result.n_pros
+            assert "seqstr" in prostrs.columns
+            assert prostrs.loc[1, "seqstr"] == 'ABCDEFGHI'
 
         zest()
 
+    @zest.skip("m", "Manas")
     def pros_of_interest():
         def it_sets_pros_of_interest():
             raise NotImplementedError
@@ -98,6 +116,7 @@ def zest_PrepResult():
 
         zest()
 
+    @zest.skip("m", "Manas")
     def peps():
         def it_gets_peps():
             raise NotImplementedError
@@ -166,6 +185,7 @@ def zest_PrepResult():
 
         zest()
 
+    @zest.skip("m", "Manas")
     def pros_and_peps():
         def it_gets_pros__peps():
             raise NotImplementedError
