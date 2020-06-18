@@ -254,19 +254,66 @@ def zest_PrepResult():
             assert len(pepseqs) == 4
             assert pepseqs.aa.str.cat() == "AACB"
 
-        @zest.skip("m", "Manas")
         def peps__ptms():
+            result = PrepResult.stub_prep_result(
+                pros=[".", "ABCDEF", "ABACAB"],
+                pro_is_decoys=[False, True, False],
+                pro_ptm_locs=["", "3;4", "1;3"],
+                peps=[".", "ABCDEF", "ABACAB"],
+                pep_pro_iz=[0,1,2],
+            )
+            result._peps.loc[1, "pep_start"] = 1
+            result._peps.loc[1, "pep_stop"] = 2
+            result._peps.loc[2, "pep_start"] = 0
+            result._peps.loc[2, "pep_stop"] = 6
+            result.params = _stub_prep_params([".", "ABCDEF", "ABACAB"])
+
+            peps__ptms = result.peps__ptms(ptms_to_rows=False)
+            assert len(peps__ptms) == 1
+            assert peps__ptms.at[0, "pro_id"] == "id_2"
+            assert peps__ptms.at[0, "n_pep_ptms"] == 2
+            assert peps__ptms.at[0, "pro_ptm_locs"] == "1;3"
+
             def it_filters_decoys():
-                raise NotImplementedError
+                peps__ptms = result.peps__ptms(include_decoys=True, in_report_only=False, ptm_peps_only=False, ptms_to_rows=False)
+                assert len(peps__ptms) == 2
+                assert peps__ptms["pro_id"].tolist() == ["id_1", "id_2"]
+
+                peps__ptms = result.peps__ptms(include_decoys=False, in_report_only=False, ptm_peps_only=False, ptms_to_rows=False)
+                assert len(peps__ptms) == 1
+                assert peps__ptms["pro_id"].tolist() == ["id_2"]
 
             def it_filters_in_report_only():
-                raise NotImplementedError
+                peps__ptms = result.peps__ptms(include_decoys=True, in_report_only=True, ptm_peps_only=False, ptms_to_rows=False)
+                assert len(peps__ptms) == 0
+
+                result.set_pros_of_interest("id_1")
+                peps__ptms = result.peps__ptms(include_decoys=True, in_report_only=True, ptm_peps_only=False, ptms_to_rows=False)
+                assert len(peps__ptms) == 1
+                assert peps__ptms["pro_id"].tolist() == ["id_1"]
 
             def it_filters_ptm_peps_only():
-                raise NotImplementedError
+                peps__ptms = result.peps__ptms(include_decoys=True, in_report_only=False, ptm_peps_only=False, ptms_to_rows=False)
+                assert len(peps__ptms) == 2
+                assert peps__ptms["pro_id"].tolist() == ["id_1", "id_2"]
+                assert peps__ptms["pro_ptm_locs"].tolist() == ["", "1;3"]
+
+                peps__ptms = result.peps__ptms(include_decoys=True, in_report_only=False, ptm_peps_only=True, ptms_to_rows=False)
+                assert len(peps__ptms) == 1
+                assert peps__ptms["pro_id"].tolist() == ["id_2"]
+                assert peps__ptms["pro_ptm_locs"].tolist() == ["1;3"]
 
             def it_ptms_to_rows():
-                raise NotImplementedError
+                peps__ptms = result.peps__ptms(include_decoys=True, in_report_only=False, ptm_peps_only=True, ptms_to_rows=False)
+                assert len(peps__ptms) == 1
+                assert peps__ptms["pro_id"].tolist() == ["id_2"]
+                assert peps__ptms["pro_ptm_locs"].tolist() == ["1;3"]
+
+                peps__ptms = result.peps__ptms(include_decoys=True, in_report_only=False, ptm_peps_only=True, ptms_to_rows=True)
+                assert len(peps__ptms) == 2
+                assert peps__ptms["pro_id"].tolist() == ["id_2", "id_2"]
+                assert peps__ptms["pro_ptm_locs"].tolist() == ["1;3", "1;3"]
+                assert peps__ptms["ptm"].tolist() == ["1", "3"]
 
             zest()
 
