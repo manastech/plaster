@@ -6,7 +6,7 @@ from plaster.run.prep.prep_result import PrepResult
 from plaster.run.prep.prep_params import PrepParams
 
 
-def stub_prep_params(pros, pro_abundances=[]):
+def _stub_prep_params(pros, pro_abundances=[]):
     def stub_protein(i, seq, abundance):
         pro = dict(name=f"id_{i}", sequence=seq)
         if abundance is not None:
@@ -29,8 +29,8 @@ def zest_PrepResult():
         def _before():
             nonlocal result, default_params, params_with_abundance
 
-            default_params = stub_prep_params(pros=["ABC", "CCE", "AAB"])
-            params_with_abundance = stub_prep_params(pros=["ABC", "CCE", "AAB"], pro_abundances=[2, np.nan, 1])
+            default_params = _stub_prep_params(pros=["ABC", "CCE", "AAB"])
+            params_with_abundance = _stub_prep_params(pros=["ABC", "CCE", "AAB"], pro_abundances=[2, np.nan, 1])
 
             result = PrepResult.stub_prep_result(
                 pros=[".", "ABCDEFGHI", "DDD"],
@@ -108,7 +108,7 @@ def zest_PrepResult():
                 peps=["AA", "AB"],
                 pep_pro_iz=[1,0]
             )
-            result.params = stub_prep_params(["ABCD"])
+            result.params = _stub_prep_params(["ABCD"])
 
         def it_sets_pros_of_interest():
             result.set_pros_of_interest("id_0")
@@ -158,7 +158,7 @@ def zest_PrepResult():
                 peps=["AACB", "ABCD"],
                 pep_pro_iz=[1,0]
             )
-            result.params = stub_prep_params(["AACB", "ABCD"], [5])
+            result.params = _stub_prep_params(["AACB", "ABCD"], [5])
 
             all_decoys_result = PrepResult.stub_prep_result(
                 pros=["ABC", "CDE"],
@@ -231,7 +231,7 @@ def zest_PrepResult():
                     pros=["ABC", "CDE"], pro_is_decoys=[False, False],
                     peps=["ABC", "CDE"], pep_pro_iz=[0,1]
                 )
-                no_interest_result.params = stub_prep_params(["ABC", "CDE"])
+                no_interest_result.params = _stub_prep_params(["ABC", "CDE"])
                 in_report = no_interest_result.peps__in_report()
                 assert len(in_report) == 0
 
@@ -249,7 +249,7 @@ def zest_PrepResult():
                 peps=["ABCD", "AACB"],
                 pep_pro_iz=[0,1]
             )
-            result.params = stub_prep_params(["ABCD", "AACB"])
+            result.params = _stub_prep_params(["ABCD", "AACB"])
             pepseqs = result.pepseqs__no_decoys()
             assert len(pepseqs) == 4
             assert pepseqs.aa.str.cat() == "AACB"
