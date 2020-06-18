@@ -319,13 +319,28 @@ def zest_PrepResult():
 
         zest()
 
-    @zest.skip("m", "Manas")
     def pros_and_peps():
+        result = PrepResult.stub_prep_result(
+            pros=[".", "ABCDEF", "ABACAB"],
+            pro_is_decoys=[False, True, False],
+            peps=[".", "ABCDEF", "ABACAB"],
+            pep_pro_iz=[0,1,2],
+        )
+        result.params = _stub_prep_params([".", "ABCDEF", "ABACAB"])
+
         def it_gets_pros__peps():
-            raise NotImplementedError
+            pros__peps = result.pros__peps()
+            assert len(pros__peps) == 3
+            assert pros__peps["pro_id"].tolist() == ["id_0", "id_1", "id_2"]
+            assert pros__peps["pro_i"].tolist() == [0,1,2]
+            assert pros__peps["pep_i"].tolist() == [0,1,2]
+            assert pros__peps["pro_is_decoy"].tolist() == [False, True, False]
 
         def it_gets_pros__peps__pepstrs():
-            raise NotImplementedError
+            pros__peps__pepstrs = result.pros__peps__pepstrs()
+            assert len(pros__peps__pepstrs) == 3
+            assert pros__peps__pepstrs["pro_id"].tolist() == ["id_0", "id_1", "id_2"]
+            assert pros__peps__pepstrs["seqstr"].tolist() == [".", "ABCDEF", "ABACAB"]
 
         zest()
 
