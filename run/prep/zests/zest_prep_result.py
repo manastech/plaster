@@ -70,30 +70,30 @@ def zest_PrepResult():
             with_ptm_locs = result.pros__ptm_locs()
             assert len(with_ptm_locs) == 1
             assert np.all(with_ptm_locs.pro_ptm_locs != "")
-            assert np.all(with_ptm_locs.columns == PrepResult.pros_columns)
+            assert with_ptm_locs.columns.tolist() == PrepResult.pros_columns
 
         def it_gets_pros__from_decoys():
             from_decoys = result.pros__from_decoys()
             assert len(from_decoys) == 1
             assert np.all(from_decoys.pro_is_decoy)
-            assert np.all(from_decoys.columns == PrepResult.pros_columns)
+            assert from_decoys.columns.tolist() == PrepResult.pros_columns
 
         def it_gets_pros__no_decoys():
             no_decoys = result.pros__no_decoys()
             assert len(no_decoys) == 2
             assert not np.any(no_decoys.pro_is_decoy)
-            assert np.all(no_decoys.columns == PrepResult.pros_columns)
+            assert no_decoys.columns.tolist() == PrepResult.pros_columns
 
         def it_gets_proseqs():
             proseqs = result.proseqs()
-            assert proseqs.query('pro_i == 1').aa.str.cat() == 'ABCDEFGHI'
-            assert np.all(proseqs.columns == PrepResult.pro_seqs_columns)
+            assert proseqs.query("pro_i == 1").aa.str.cat() == "ABCDEFGHI"
+            assert proseqs.columns.tolist() == PrepResult.pro_seqs_columns
 
         def it_gets_prostrs():
             prostrs = result.prostrs()
             assert len(prostrs) == result.n_pros
             assert "seqstr" in prostrs.columns
-            assert prostrs.loc[1, "seqstr"] == 'ABCDEFGHI'
+            assert prostrs.loc[1, "seqstr"] == "ABCDEFGHI"
 
         zest()
 
@@ -111,82 +111,150 @@ def zest_PrepResult():
             result.params = stub_prep_params(["ABCD"])
 
         def it_sets_pros_of_interest():
-            result.set_pros_of_interest('id_0')
-            assert result.pros().set_index('pro_id').at['id_0', 'pro_report'] > 0
+            result.set_pros_of_interest("id_0")
+            assert result.pros().pro_report.astype(bool).tolist() == [True, False]
+            result.set_pros_of_interest("id_1")
+            assert result.pros().pro_report.astype(bool).tolist() == [False, True]
+            result.set_pros_of_interest(["id_0", "id_1"])
+            assert result.pros().pro_report.astype(bool).tolist() == [True, True]
+
+        def it_gets_pros__in_report():
+            result.set_pros_of_interest("id_1")
+            in_report = result.pros__in_report()
+            assert len(in_report) == 1
+            assert in_report.set_index("pro_id").index.tolist() == ["id_1"]
 
         def it_gets_n_pros_of_interest():
             assert result.n_pros_of_interest == 0
-            result.set_pros_of_interest(['id_0', 'id_1'])
+            result.set_pros_of_interest(["id_0", "id_1"])
             assert result.n_pros_of_interest == 2
 
         def it_asserts_protein_ids():
             with zest.raises(Exception):
-                result.set_pros_of_interest('P1')
+                result.set_pros_of_interest("P1")
 
         def it_sets_pro_ptm_locs():
-            result.set_pro_ptm_locs('id_0', '1;3')
-            assert result.pros().set_index('pro_id').at['id_0', 'pro_ptm_locs'] == '1;3'
+            result.set_pro_ptm_locs("id_0", "1;3")
+            assert result.pros().set_index("pro_id").at["id_0", "pro_ptm_locs"] == "1;3"
             assert 'id_0' in result.pros__ptm_locs().pro_id.values
 
         def it_gets_pro_ptm_locs():
-            assert result.get_pro_ptm_locs('id_0') == ''
-            result.set_pro_ptm_locs('id_0', '1;3')
-            assert result.get_pro_ptm_locs('id_0') == '1;3'
+            assert result.get_pro_ptm_locs("id_0") == ""
+            result.set_pro_ptm_locs("id_0", "1;3")
+            assert result.get_pro_ptm_locs("id_0") == "1;3"
 
         zest()
 
-    @zest.skip("m", "Manas")
     def peps():
+        result = None
+        all_decoys_result = None
+
+        def _before():
+            nonlocal result, all_decoys_result
+
+            result = PrepResult.stub_prep_result(
+                pros=["ABCD", "AACB"],
+                pro_is_decoys=[False, False],
+                peps=["AACB", "ABCD"],
+                pep_pro_iz=[1,0]
+            )
+            result.params = stub_prep_params(["AACB", "ABCD"], [5])
+
+            all_decoys_result = PrepResult.stub_prep_result(
+                pros=["ABC", "CDE"],
+                pro_is_decoys=[True, True],
+                peps=["ABC", "CDE"],
+                pep_pro_iz=[0,1]
+            )
+
         def it_gets_peps():
-            raise NotImplementedError
+            peps = result.peps()
+            assert isinstance(peps, pd.DataFrame)
+            assert peps.columns.tolist() == PrepResult.peps_columns
+            assert len(peps) == 2
 
         def it_gets_n_peps():
-            raise NotImplementedError
+            assert result.n_peps == 2
 
         def it_gets_pepstrs():
-            raise NotImplementedError
+            pepstrs = result.pepstrs()
+            assert pepstrs.seqstr.values.tolist() == ["AACB", "ABCD"]
 
         def it_gets_pepseqs():
-            raise NotImplementedError
+            pepseqs = result.pepseqs()
+            assert pepseqs.columns.tolist() == PrepResult.pep_seqs_columns
+            assert pepseqs.aa.str.cat() == "AACBABCD"
+            assert len(pepseqs) == 8
 
         def it_gets_peps_abundance():
-            raise NotImplementedError
+            peps_abundance = result.peps_abundance()
+            assert len(peps_abundance) == 2
 
             def it_fills_zero_for_missing_abundance():
-                raise NotImplementedError
+                assert peps_abundance.tolist() == [5., 0.]
 
             zest()
 
         def it_gets_peps__no_decoys():
-            raise NotImplementedError
+            no_decoys = result.peps__no_decoys()
+            assert len(no_decoys) == 2
+            assert no_decoys.columns.tolist() == PrepResult.peps_columns
 
             def it_handles_empty_return():
-                raise NotImplementedError
+                no_decoys = all_decoys_result.peps__no_decoys()
+                assert len(no_decoys) == 0
+                assert no_decoys.columns.tolist() == PrepResult.peps_columns
 
             zest()
 
         def it_gets_peps__from_decoys():
-            raise NotImplementedError
+            from_decoys = all_decoys_result.peps__from_decoys()
+            assert len(from_decoys) == 2
+            assert from_decoys.columns.tolist() == PrepResult.peps_columns
 
             def it_handles_empty_return():
-                raise NotImplementedError
+                from_decoys = result.peps__from_decoys()
+                assert len(from_decoys) == 0
+                assert from_decoys.columns.tolist() == PrepResult.peps_columns
 
             zest()
 
         def peps__in_report():
-            raise NotImplementedError
+            result.set_pros_of_interest("id_0")
+            in_report = result.peps__in_report()
+            assert in_report.columns.tolist() == PrepResult.peps_columns
+            assert len(in_report) == 1
+            assert in_report.set_index("pro_i").index.tolist() == [0]
 
             def it_handles_empty_return():
-                raise NotImplementedError
+                no_interest_result = PrepResult.stub_prep_result(
+                    pros=["ABC", "CDE"], pro_is_decoys=[False, False],
+                    peps=["ABC", "CDE"], pep_pro_iz=[0,1]
+                )
+                no_interest_result.params = stub_prep_params(["ABC", "CDE"])
+                in_report = no_interest_result.peps__in_report()
+                assert len(in_report) == 0
 
             zest()
 
         def it_gets_peps__pepseqs():
-            raise NotImplementedError
+            pepseqs = result.peps__pepseqs()
+            assert len(pepseqs) == 8
+            assert pepseqs.aa.str.cat() == "AACBABCD"
 
         def it_gets_pepseqs__no_decoys():
-            raise NotImplementedError
+            result = PrepResult.stub_prep_result(
+                pros=["ABCD", "AACB"],
+                pro_is_decoys=[True, False],
+                peps=["ABCD", "AACB"],
+                pep_pro_iz=[0,1]
+            )
+            result.params = stub_prep_params(["ABCD", "AACB"])
+            pepseqs = result.pepseqs__no_decoys()
+            assert len(pepseqs) == 4
+            assert pepseqs.aa.str.cat() == "AACB"
 
+        @zest.skip("m", "Manas")
         def peps__ptms():
             def it_filters_decoys():
                 raise NotImplementedError
