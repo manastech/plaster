@@ -291,7 +291,13 @@ class PrepResult(BaseResult):
         _pros = pd.DataFrame(
             [
                 (f"id_{i}", is_decoy, i, ptm_locs or "", 0)
-                for i, (_, is_decoy, ptm_locs) in enumerate(zip(pros, pro_is_decoys, itertools.chain(pro_ptm_locs, itertools.repeat(""))))
+                for i, (_, is_decoy, ptm_locs) in enumerate(
+                    zip(
+                        pros,
+                        pro_is_decoys,
+                        itertools.chain(pro_ptm_locs, itertools.repeat("")),
+                    )
+                )
             ],
             columns=PrepResult.pros_columns,
         )
