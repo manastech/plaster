@@ -24,6 +24,86 @@ def _stub_prep_params(pros, pro_abundances=[]):
 
 
 def zest_PrepResult():
+    def _make_prep_result(pros, is_decoys=[], abundances=[], ptm_locs=[], in_report=[]):
+        """
+        Builds a PrepResult from a list of proteins. Each protein can be a
+        string or a list of strings. Lists of strings are returned as multiple
+        peps for the same protein.
+        Eg. _make_prep_result([("AAXC", "XKP"), "AGGH"]) will yield 2 pros and 3 peps.
+        """
+        n_pros = len(pros)
+        names = [f"id_{i}" for i in range(n_pros)]
+
+        # normalize pros as lists
+        pros = list(map(lambda x: x if isinstance(x, list) else list(x), pros))
+
+        seqstrs = ["".join(pro) for pro in pros]
+        is_decoys = (is_decoys + n_pros * [False])[:n_pros]
+        abundances = (abundances + n_pros * [None])[:n_pros]
+        ptm_locs = (ptm_locs + n_pros * [""])[:n_pros]
+        in_report = (in_report + n_pros * [0])[:n_pros]
+
+        # extract peps from pros definitions
+        peps_lens = [list(map(len, pro)) for pro in pros]
+        peps = [
+            (i, pep, start, stop - 1)
+            for i, (pro, pep_lens) in enumerate(zip(pros, peps_lens))
+            for pep, start, stop in zip(
+                pro,
+                itertools.accumulate([0] + pep_lens),
+                itertools.accumulate(pep_lens),
+            )
+        ]
+
+        proteins = [
+            dict(name=name, sequence=seq, abundance=abundance, report=report)
+            for name, seq, abundance, report in zip(
+                names, seqstrs, abundances, in_report
+            )
+        ]
+        params = PrepParams(proteins=proteins)
+
+        _pros = pd.DataFrame(
+            [
+                (name, is_decoy, i, ptm_locs, in_report)
+                for i, (name, is_decoy, ptm_locs, in_report) in enumerate(
+                    zip(names, is_decoys, ptm_locs, in_report)
+                )
+            ],
+            columns=PrepResult.pros_columns,
+        )
+
+        _pro_seqs = pd.DataFrame(
+            [
+                (pro_i, aa)
+                for pro_i, seqstr in enumerate(seqstrs)
+                for aa in list(seqstr)
+            ],
+            columns=PrepResult.pro_seqs_columns,
+        )
+
+        _peps = pd.DataFrame(
+            [(i, start, stop, pro_i) for i, (pro_i, _, start, stop) in enumerate(peps)],
+            columns=PrepResult.peps_columns,
+        )
+
+        _pep_seqs = pd.DataFrame(
+            [
+                (pep_i, aa, start + offset)
+                for pep_i, (_, pep, start, _) in enumerate(peps)
+                for offset, aa in enumerate(list(pep))
+            ],
+            columns=PrepResult.pep_seqs_columns,
+        )
+
+        return PrepResult(
+            params=params,
+            _pros=_pros,
+            _pro_seqs=_pro_seqs,
+            _peps=_peps,
+            _pep_seqs=_pep_seqs,
+        )
+
     def pros():
         result = None
         default_params = None
