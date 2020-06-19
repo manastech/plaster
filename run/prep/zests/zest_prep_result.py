@@ -6,23 +6,6 @@ from plaster.run.prep.prep_result import PrepResult
 from plaster.run.prep.prep_params import PrepParams
 
 
-def _stub_prep_params(pros, pro_abundances=[]):
-    def stub_protein(i, seq, abundance):
-        pro = dict(name=f"id_{i}", sequence=seq)
-        if abundance is not None:
-            pro["abundance"] = abundance
-        return pro
-
-    proteins = [
-        stub_protein(i, seq, abundance)
-        for i, (seq, abundance) in enumerate(
-            itertools.zip_longest(pros, pro_abundances)
-        )
-    ]
-
-    return PrepParams(proteins=proteins)
-
-
 def zest_PrepResult():
     def _make_prep_result(pros, is_decoys=[], abundances=[], ptm_locs=[], in_report=[]):
         """
@@ -33,41 +16,25 @@ def zest_PrepResult():
         """
         n_pros = len(pros)
         names = [f"id_{i}" for i in range(n_pros)]
-
-        # normalize pros as lists
-        pros = list(map(lambda x: x if isinstance(x, list) else list(x), pros))
-
         seqstrs = ["".join(pro) for pro in pros]
-        is_decoys = (is_decoys + n_pros * [False])[:n_pros]
-        abundances = (abundances + n_pros * [None])[:n_pros]
-        ptm_locs = (ptm_locs + n_pros * [""])[:n_pros]
-        in_report = (in_report + n_pros * [0])[:n_pros]
 
-        # extract peps from pros definitions
-        peps_lens = [list(map(len, pro)) for pro in pros]
-        peps = [
-            (i, pep, start, stop - 1)
-            for i, (pro, pep_lens) in enumerate(zip(pros, peps_lens))
-            for pep, start, stop in zip(
-                pro,
-                itertools.accumulate([0] + pep_lens),
-                itertools.accumulate(pep_lens),
-            )
-        ]
+        def _make_protein(name, seq, abundance, report):
+            protein = dict(name=name, sequence=seq, report=report or 0)
+            if abundance is not None:
+                protein["abundance"] = abundance
+            return protein
 
         proteins = [
-            dict(name=name, sequence=seq, abundance=abundance, report=report)
-            for name, seq, abundance, report in zip(
-                names, seqstrs, abundances, in_report
-            )
+            _make_protein(*params)
+            for params in itertools.zip_longest(names, seqstrs, abundances, in_report)
         ]
         params = PrepParams(proteins=proteins)
 
         _pros = pd.DataFrame(
             [
-                (name, is_decoy, i, ptm_locs, in_report)
+                (name, is_decoy or False, i, ptm_locs or "", in_report or 0)
                 for i, (name, is_decoy, ptm_locs, in_report) in enumerate(
-                    zip(names, is_decoys, ptm_locs, in_report)
+                    itertools.zip_longest(names, is_decoys, ptm_locs, in_report)
                 )
             ],
             columns=PrepResult.pros_columns,
@@ -81,6 +48,21 @@ def zest_PrepResult():
             ],
             columns=PrepResult.pro_seqs_columns,
         )
+
+        # normalize pros as lists of strings
+        pros = list(map(lambda x: x if isinstance(x, list) else list(x), pros))
+
+        # extract peps from pros definitions
+        peps_lens = [list(map(len, pro)) for pro in pros]
+        peps = [
+            (i, pep, start, stop - 1)
+            for i, (pro, pep_lens) in enumerate(zip(pros, peps_lens))
+            for pep, start, stop in zip(
+                pro,
+                itertools.accumulate([0] + pep_lens),
+                itertools.accumulate(pep_lens),
+            )
+        ]
 
         _peps = pd.DataFrame(
             [(i, start, stop, pro_i) for i, (pro_i, _, start, stop) in enumerate(peps)],
@@ -106,26 +88,15 @@ def zest_PrepResult():
 
     def pros():
         result = None
-        default_params = None
-        params_with_abundance = None
 
         def _before():
-            nonlocal result, default_params, params_with_abundance
+            nonlocal result
 
-            default_params = _stub_prep_params(pros=["ABC", "CCE", "AAB"])
-            params_with_abundance = _stub_prep_params(
-                pros=["ABC", "CCE", "AAB"], pro_abundances=[2, np.nan, 1]
+            result = _make_prep_result(
+                [".", ["ABCDE", "FGHI"], "DDD"],
+                is_decoys=[False, False, True],
+                ptm_locs=["", "2;4", ""],
             )
-
-            result = PrepResult.stub_prep_result(
-                pros=[".", "ABCDEFGHI", "DDD"],
-                pro_is_decoys=[False, False, True],
-                peps=[".", "AAA", "CDE", "DDD"],
-                pep_pro_iz=[0, 1, 1, 2],
-            )
-            result._pros.loc[1, "pro_ptm_locs"] = "2;4"
-
-            result.params = default_params
 
         def it_gets_a_dataframe_with_reset_index():
             pros = result.pros()
@@ -133,15 +104,21 @@ def zest_PrepResult():
             assert pros.index.tolist() == list(range(len(pros)))
 
         def it_includes_abundances_if_in_params_proteins():
+            nonlocal result
             assert "abundance" not in result.pros().columns
-            result.params = params_with_abundance
+
+            result = _make_prep_result(
+                [".", ["ABC", "DEF"], "XXD"], abundances=[None, 5, 10]
+            )
             assert "abundance" in result.pros().columns
 
         def it_gets_n_pros():
             assert result.n_pros == 3
 
         def it_gets_pros_abundance():
-            result.params = params_with_abundance
+            result = _make_prep_result(
+                [".", ["ABC", "DEF"], "XXD"], abundances=[np.nan, 5, 10]
+            )
             pros_abundance = result.pros_abundance()
             assert len(pros_abundance) == result.n_pros
 
@@ -178,7 +155,7 @@ def zest_PrepResult():
             prostrs = result.prostrs()
             assert len(prostrs) == result.n_pros
             assert "seqstr" in prostrs.columns
-            assert prostrs.loc[1, "seqstr"] == "ABCDEFGHI"
+            assert prostrs.seqstr.tolist() == [".", "ABCDEFGHI", "DDD"]
 
         zest()
 
@@ -187,21 +164,23 @@ def zest_PrepResult():
 
         def _before():
             nonlocal result
-            result = PrepResult.stub_prep_result(
-                pros=["ABCD", "AACB"],
-                pro_is_decoys=[False, False],
-                peps=["AA", "AB"],
-                pep_pro_iz=[1, 0],
-            )
-            result.params = _stub_prep_params(["ABCD"])
+            result = _make_prep_result([".", ["AB", "CD"], ["AA", "CB"]])
 
         def it_sets_pros_of_interest():
             result.set_pros_of_interest("id_0")
-            assert result.pros().pro_report.astype(bool).tolist() == [True, False]
+            assert result.pros().pro_report.astype(bool).tolist() == [
+                True,
+                False,
+                False,
+            ]
             result.set_pros_of_interest("id_1")
-            assert result.pros().pro_report.astype(bool).tolist() == [False, True]
-            result.set_pros_of_interest(["id_0", "id_1"])
-            assert result.pros().pro_report.astype(bool).tolist() == [True, True]
+            assert result.pros().pro_report.astype(bool).tolist() == [
+                False,
+                True,
+                False,
+            ]
+            result.set_pros_of_interest(["id_1", "id_2"])
+            assert result.pros().pro_report.astype(bool).tolist() == [False, True, True]
 
         def it_gets_pros__in_report():
             result.set_pros_of_interest("id_1")
@@ -232,51 +211,41 @@ def zest_PrepResult():
 
     def peps():
         result = None
-        all_decoys_result = None
 
         def _before():
-            nonlocal result, all_decoys_result
+            nonlocal result
 
-            result = PrepResult.stub_prep_result(
-                pros=["ABCD", "AACB"],
-                pro_is_decoys=[False, False],
-                peps=["AACB", "ABCD"],
-                pep_pro_iz=[1, 0],
-            )
-            result.params = _stub_prep_params(["AACB", "ABCD"], [5])
-
-            all_decoys_result = PrepResult.stub_prep_result(
-                pros=["ABC", "CDE"],
-                pro_is_decoys=[True, True],
-                peps=["ABC", "CDE"],
-                pep_pro_iz=[0, 1],
+            result = _make_prep_result(
+                [".", ["ABA", "CD"], ["ABA", "CB"]],
+                abundances=[None, 5, 10],
+                is_decoys=[True, False, True],
             )
 
         def it_gets_peps():
             peps = result.peps()
             assert isinstance(peps, pd.DataFrame)
             assert peps.columns.tolist() == PrepResult.peps_columns
-            assert len(peps) == 2
+            assert peps.pro_i.tolist() == [0, 1, 1, 2, 2]
 
         def it_gets_n_peps():
-            assert result.n_peps == 2
+            assert result.n_peps == 5
 
         def it_gets_pepstrs():
             pepstrs = result.pepstrs()
-            assert pepstrs.seqstr.values.tolist() == ["AACB", "ABCD"]
+            assert pepstrs.seqstr.values.tolist() == [".", "ABA", "CD", "ABA", "CB"]
 
         def it_gets_pepseqs():
             pepseqs = result.pepseqs()
             assert pepseqs.columns.tolist() == PrepResult.pep_seqs_columns
-            assert pepseqs.aa.str.cat() == "AACBABCD"
-            assert len(pepseqs) == 8
+            assert pepseqs.aa.str.cat() == ".ABACDABACB"
+            assert len(pepseqs) == 11
 
         def it_gets_peps_abundance():
             peps_abundance = result.peps_abundance()
-            assert len(peps_abundance) == 2
+            assert len(peps_abundance) == 5
 
             def it_fills_zero_for_missing_abundance():
-                assert peps_abundance.tolist() == [5.0, 0.0]
+                assert peps_abundance.tolist() == [0.0, 5.0, 5.0, 10.0, 10.0]
 
             zest()
 
@@ -286,76 +255,51 @@ def zest_PrepResult():
             assert no_decoys.columns.tolist() == PrepResult.peps_columns
 
             def it_handles_empty_return():
-                no_decoys = all_decoys_result.peps__no_decoys()
-                assert len(no_decoys) == 0
-                assert no_decoys.columns.tolist() == PrepResult.peps_columns
+                result = _make_prep_result(["ABCDE", "DDE"], is_decoys=[True, True])
+                assert len(result.peps__no_decoys()) == 0
 
             zest()
 
         def it_gets_peps__from_decoys():
-            from_decoys = all_decoys_result.peps__from_decoys()
-            assert len(from_decoys) == 2
+            from_decoys = result.peps__from_decoys()
+            assert len(from_decoys) == 3
             assert from_decoys.columns.tolist() == PrepResult.peps_columns
 
             def it_handles_empty_return():
-                from_decoys = result.peps__from_decoys()
-                assert len(from_decoys) == 0
-                assert from_decoys.columns.tolist() == PrepResult.peps_columns
+                result = _make_prep_result(["ABC", "DEF"])
+                assert len(result.peps__from_decoys()) == 0
 
             zest()
 
         def peps__in_report():
-            result.set_pros_of_interest("id_0")
+            result.set_pros_of_interest("id_1")
             in_report = result.peps__in_report()
             assert in_report.columns.tolist() == PrepResult.peps_columns
-            assert len(in_report) == 1
-            assert in_report.set_index("pro_i").index.tolist() == [0]
+            assert len(in_report) == 2
+            assert in_report.pro_i.drop_duplicates().tolist() == [1]
 
             def it_handles_empty_return():
-                no_interest_result = PrepResult.stub_prep_result(
-                    pros=["ABC", "CDE"],
-                    pro_is_decoys=[False, False],
-                    peps=["ABC", "CDE"],
-                    pep_pro_iz=[0, 1],
-                )
-                no_interest_result.params = _stub_prep_params(["ABC", "CDE"])
-                in_report = no_interest_result.peps__in_report()
-                assert len(in_report) == 0
+                result.set_pros_of_interest([])
+                assert len(result.peps__in_report()) == 0
 
             zest()
 
         def it_gets_peps__pepseqs():
             pepseqs = result.peps__pepseqs()
-            assert len(pepseqs) == 8
-            assert pepseqs.aa.str.cat() == "AACBABCD"
+            assert len(pepseqs) == 11
+            assert pepseqs.aa.str.cat() == ".ABACDABACB"
 
         def it_gets_pepseqs__no_decoys():
-            result = PrepResult.stub_prep_result(
-                pros=["ABCD", "AACB"],
-                pro_is_decoys=[True, False],
-                peps=["ABCD", "AACB"],
-                pep_pro_iz=[0, 1],
-            )
-            result.params = _stub_prep_params(["ABCD", "AACB"])
             pepseqs = result.pepseqs__no_decoys()
-            assert len(pepseqs) == 4
-            assert pepseqs.aa.str.cat() == "AACB"
+            assert len(pepseqs) == 5
+            assert pepseqs.aa.str.cat() == "ABACD"
 
         def peps__ptms():
-            result = PrepResult.stub_prep_result(
-                pros=[".", "ABCDEF", "ABACAB"],
-                pro_is_decoys=[False, True, False],
-                peps=[".", "ABCDEF", "ABACAB"],
-                pep_pro_iz=[0, 1, 2],
+            result = _make_prep_result(
+                [".", ["ABCD", "EGGX"], ["AABX", "HGK"]],
+                is_decoys=[False, True, False],
+                ptm_locs=["", "3;6", "1;3"],
             )
-            result._pros.loc[1, "pro_ptm_locs"] = "3;4"
-            result._pros.loc[2, "pro_ptm_locs"] = "1;3"
-            result._peps.loc[1, "pep_start"] = 1
-            result._peps.loc[1, "pep_stop"] = 2
-            result._peps.loc[2, "pep_start"] = 0
-            result._peps.loc[2, "pep_stop"] = 6
-            result.params = _stub_prep_params([".", "ABCDEF", "ABACAB"])
-
             peps__ptms = result.peps__ptms(ptms_to_rows=False)
             assert len(peps__ptms) == 1
             assert peps__ptms.at[0, "pro_id"] == "id_2"
@@ -366,16 +310,16 @@ def zest_PrepResult():
                 peps__ptms = result.peps__ptms(
                     include_decoys=True,
                     in_report_only=False,
-                    ptm_peps_only=False,
+                    ptm_peps_only=True,
                     ptms_to_rows=False,
                 )
-                assert len(peps__ptms) == 2
-                assert peps__ptms["pro_id"].tolist() == ["id_1", "id_2"]
+                assert len(peps__ptms) == 3
+                assert peps__ptms["pro_id"].tolist() == ["id_1", "id_1", "id_2"]
 
                 peps__ptms = result.peps__ptms(
                     include_decoys=False,
                     in_report_only=False,
-                    ptm_peps_only=False,
+                    ptm_peps_only=True,
                     ptms_to_rows=False,
                 )
                 assert len(peps__ptms) == 1
@@ -397,8 +341,8 @@ def zest_PrepResult():
                     ptm_peps_only=False,
                     ptms_to_rows=False,
                 )
-                assert len(peps__ptms) == 1
-                assert peps__ptms["pro_id"].tolist() == ["id_1"]
+                assert len(peps__ptms) == 2
+                assert peps__ptms["pro_id"].tolist() == ["id_1", "id_1"]
 
             def it_filters_ptm_peps_only():
                 peps__ptms = result.peps__ptms(
@@ -407,9 +351,9 @@ def zest_PrepResult():
                     ptm_peps_only=False,
                     ptms_to_rows=False,
                 )
-                assert len(peps__ptms) == 2
-                assert peps__ptms["pro_id"].tolist() == ["id_1", "id_2"]
-                assert peps__ptms["pro_ptm_locs"].tolist() == ["", "1;3"]
+                assert len(peps__ptms) == 4
+                assert peps__ptms["pro_id"].tolist() == ["id_1", "id_1", "id_2", "id_2"]
+                assert peps__ptms["pro_ptm_locs"].tolist() == ["3", "6", "1;3", ""]
 
                 peps__ptms = result.peps__ptms(
                     include_decoys=True,
@@ -417,13 +361,13 @@ def zest_PrepResult():
                     ptm_peps_only=True,
                     ptms_to_rows=False,
                 )
-                assert len(peps__ptms) == 1
-                assert peps__ptms["pro_id"].tolist() == ["id_2"]
-                assert peps__ptms["pro_ptm_locs"].tolist() == ["1;3"]
+                assert len(peps__ptms) == 3
+                assert peps__ptms["pro_id"].tolist() == ["id_1", "id_1", "id_2"]
+                assert peps__ptms["pro_ptm_locs"].tolist() == ["3", "6", "1;3"]
 
             def it_ptms_to_rows():
                 peps__ptms = result.peps__ptms(
-                    include_decoys=True,
+                    include_decoys=False,
                     in_report_only=False,
                     ptm_peps_only=True,
                     ptms_to_rows=False,
@@ -433,7 +377,7 @@ def zest_PrepResult():
                 assert peps__ptms["pro_ptm_locs"].tolist() == ["1;3"]
 
                 peps__ptms = result.peps__ptms(
-                    include_decoys=True,
+                    include_decoys=False,
                     in_report_only=False,
                     ptm_peps_only=True,
                     ptms_to_rows=True,
@@ -448,27 +392,47 @@ def zest_PrepResult():
         zest()
 
     def pros_and_peps():
-        result = PrepResult.stub_prep_result(
-            pros=[".", "ABCDEF", "ABACAB"],
-            pro_is_decoys=[False, True, False],
-            peps=[".", "ABCDEF", "ABACAB"],
-            pep_pro_iz=[0, 1, 2],
+        result = _make_prep_result(
+            [".", ["ABCD", "EF"], ["ABA", "CAB"]], is_decoys=[False, True, False],
         )
-        result.params = _stub_prep_params([".", "ABCDEF", "ABACAB"])
 
         def it_gets_pros__peps():
             pros__peps = result.pros__peps()
-            assert len(pros__peps) == 3
-            assert pros__peps["pro_id"].tolist() == ["id_0", "id_1", "id_2"]
-            assert pros__peps["pro_i"].tolist() == [0, 1, 2]
-            assert pros__peps["pep_i"].tolist() == [0, 1, 2]
-            assert pros__peps["pro_is_decoy"].tolist() == [False, True, False]
+            assert len(pros__peps) == 5
+            assert pros__peps["pro_id"].tolist() == [
+                "id_0",
+                "id_1",
+                "id_1",
+                "id_2",
+                "id_2",
+            ]
+            assert pros__peps["pro_i"].tolist() == [0, 1, 1, 2, 2]
+            assert pros__peps["pep_i"].tolist() == list(range(5))
+            assert pros__peps["pro_is_decoy"].tolist() == [
+                False,
+                True,
+                True,
+                False,
+                False,
+            ]
 
         def it_gets_pros__peps__pepstrs():
             pros__peps__pepstrs = result.pros__peps__pepstrs()
-            assert len(pros__peps__pepstrs) == 3
-            assert pros__peps__pepstrs["pro_id"].tolist() == ["id_0", "id_1", "id_2"]
-            assert pros__peps__pepstrs["seqstr"].tolist() == [".", "ABCDEF", "ABACAB"]
+            assert len(pros__peps__pepstrs) == 5
+            assert pros__peps__pepstrs["pro_id"].tolist() == [
+                "id_0",
+                "id_1",
+                "id_1",
+                "id_2",
+                "id_2",
+            ]
+            assert pros__peps__pepstrs["seqstr"].tolist() == [
+                ".",
+                "ABCD",
+                "EF",
+                "ABA",
+                "CAB",
+            ]
 
         zest()
 
