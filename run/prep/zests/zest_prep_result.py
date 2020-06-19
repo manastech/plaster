@@ -40,17 +40,17 @@ def zest_PrepResult():
             result = PrepResult.stub_prep_result(
                 pros=[".", "ABCDEFGHI", "DDD"],
                 pro_is_decoys=[False, False, True],
-                pro_ptm_locs=["", "2;4"],
                 peps=[".", "AAA", "CDE", "DDD"],
                 pep_pro_iz=[0, 1, 1, 2],
             )
+            result._pros.loc[1, "pro_ptm_locs"] = "2;4"
 
             result.params = default_params
 
-        def it_gets_a_dataframe_with_pro_id_index():
+        def it_gets_a_dataframe_with_reset_index():
             pros = result.pros()
             assert isinstance(pros, pd.DataFrame)
-            assert "pro_id" in pros.columns
+            assert pros.index.tolist() == list(range(len(pros)))
 
         def it_includes_abundances_if_in_params_proteins():
             assert "abundance" not in result.pros().columns
@@ -265,10 +265,11 @@ def zest_PrepResult():
             result = PrepResult.stub_prep_result(
                 pros=[".", "ABCDEF", "ABACAB"],
                 pro_is_decoys=[False, True, False],
-                pro_ptm_locs=["", "3;4", "1;3"],
                 peps=[".", "ABCDEF", "ABACAB"],
                 pep_pro_iz=[0, 1, 2],
             )
+            result._pros.loc[1, "pro_ptm_locs"] = "3;4"
+            result._pros.loc[2, "pro_ptm_locs"] = "1;3"
             result._peps.loc[1, "pep_start"] = 1
             result._peps.loc[1, "pep_stop"] = 2
             result._peps.loc[2, "pep_start"] = 0
