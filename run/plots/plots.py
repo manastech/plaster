@@ -15,23 +15,23 @@ Note:
         def wizard_* are interactive wizard-type components that may have plot components
     * bokeh imports should be deferred (they tend to slow down tests)
 """
-import pandas as pd
-import numpy as np
-from munch import Munch
-from plaster.tools.image import imops
-from plaster.tools.image.coord import WH, XY
-from plaster.tools.zplots.zplots import ZPlots
-from plaster.tools.ipynb_helpers import displays
-from plaster.tools.utils import data
 from collections import defaultdict
-from plaster.tools.schema import check
-from plaster.tools.utils import utils
-from plaster.tools.ipynb_helpers.displays import hd, md
-from plaster.tools.log.log import debug, info
-from scipy.stats import iqr
+
+from munch import Munch
+
+import numpy as np
+import pandas as pd
 from plaster.run.call_bag import CallBag
 from plaster.run.lnfit.lnfit_result import LNFitResult
-
+from plaster.tools.image import imops
+from plaster.tools.image.coord import WH, XY
+from plaster.tools.ipynb_helpers import displays
+from plaster.tools.ipynb_helpers.displays import hd, md
+from plaster.tools.log.log import debug, info
+from plaster.tools.schema import check
+from plaster.tools.utils import data, utils
+from plaster.tools.zplots.zplots import ZPlots
+from scipy.stats import iqr
 
 # Mature
 # ====================================================================================================
@@ -902,10 +902,10 @@ def wizard_raw_images(
             (1, 1, 0, 1200, 1210, 1220, 1230),
             (1, 1, 1, 1201, 1211, 1221, 1231),
         ], columns=["frame_i", "ch_i", "cy_i", "x", "y", "w", "h"])
-        
+
         def rec(row):
             return row[["x", "y"]]
-            
+
         df.set_index("frame_i").groupby(["frame_i"]).apply(rec)
         """
         mask_rects_for_field = None
@@ -1146,7 +1146,7 @@ def wizard_xy_df(run, channel_i=None, result_block="sigproc_v1", **kwargs):
             # 256 bins will get colored red.  Maybe this is not a good solution, but as I play
             # with the heatmap using this scheme, I find that it is drawing my attention to
             # some interesting things, so I'm leaving it for now.
-            palette = Viridis256
+            palette = list(Viridis256)
             palette[0] = "#FF0000"
 
             mapper = linear_cmap(

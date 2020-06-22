@@ -11,6 +11,7 @@ from plaster.run.sigproc_v2.psf_sample import psf_sample
 from plaster.tools.log.log import debug
 from plaster.run.sigproc_v2.sigproc_v2_task import SigprocV2Params
 
+
 def zest_kernel():
     def it_has_zero_mean():
         kern = worker._kernel()
@@ -208,9 +209,9 @@ def zest_peak_find():
         _expected = [
             [100, 88, 10],
             [125, 117, 10],
-            [150, 134, 15],
-            [175, 151, 20],
-            [200, 172, 20],
+            [150, 134, 20],
+            [175, 151, 25],
+            [200, 172, 25],
         ]
         for expected, n_peaks in zip(_expected, np.linspace(100, 200, 5).astype(int)):
             with synth.Synth(overwrite=True, dim=(256, 256)) as s:
@@ -304,7 +305,6 @@ def zest_psf_estimate():
             expected = np.array([np.nan, expected_std, expected_std, 8, 8, 0, 0, 17])
             assert np.all((got[1:] - expected[1:]) ** 2 < 0.15 ** 2)
 
-
     def it_skips_near_edges():
         peaks, im, std = _make_image(0.0)
         psf, reasons = worker._psf_estimate(im, peaks.locs, mea=17, return_reasons=True)
@@ -347,26 +347,38 @@ def zest_psf_estimate():
             else:
                 assert reason[worker.PSFEstimateMaskFields.skipped_too_dark] == 1
 
-    @zest.skip("?", "Occasionally broken, needs review")
     def it_skips_too_oval():
-        locs = [[64, 54], [64, 70]]
-        with synth.Synth(overwrite=True, dim=(128, 128)) as s:
-            peaks = synth.PeaksModelGaussianCircular(n_peaks=len(locs)).amps_constant(
-                val=4_000
-            )
-            peaks.std_x = [1.0, 1.0]
-            peaks.std_y = [1.0, 2.0]
-            synth.CameraModel(bias=bg_mean, std=bg_std)
-            peaks.locs = locs
-            im = s.render_chcy()[0, 0]
-            im = im - bg_mean
+        """It doesn't have to work perfectly every time, but pass once in a 10 try loop"""
+        n_fails = 0
+        for i in range(10):
+            failed = 0
+            locs = [[64, 54], [64, 70]]
+            with synth.Synth(overwrite=True, dim=(128, 128)) as s:
+                peaks = synth.PeaksModelGaussianCircular(
+                    n_peaks=len(locs)
+                ).amps_constant(val=4_000)
+                peaks.std_x = [1.0, 1.0]
+                peaks.std_y = [1.0, 2.0]
+                synth.CameraModel(bias=bg_mean, std=bg_std)
+                peaks.locs = locs
+                im = s.render_chcy()[0, 0]
+                im = im - bg_mean
 
-        psf, reasons = worker._psf_estimate(im, peaks.locs, mea=17, return_reasons=True)
-        for loc, reason in zip(peaks.locs, reasons):
-            if loc[1] < 64:
-                assert reason[worker.PSFEstimateMaskFields.skipped_too_oval] == 0
-            else:
-                assert reason[worker.PSFEstimateMaskFields.skipped_too_oval] == 1
+            psf, reasons = worker._psf_estimate(
+                im, peaks.locs, mea=17, return_reasons=True
+            )
+            for loc, reason in zip(peaks.locs, reasons):
+                if loc[1] < 64:
+                    if reason[worker.PSFEstimateMaskFields.skipped_too_oval] != 0:
+                        failed += 1
+                else:
+                    if reason[worker.PSFEstimateMaskFields.skipped_too_oval] != 1:
+                        failed += 1
+
+            if failed != 0:
+                n_fails += 1
+
+        assert n_fails < 3
 
     def it_normalizes():
         peaks, im, std = _make_image(0.0, 100)
@@ -441,14 +453,21 @@ For now I'm keeping the input order the same as the output
 
 
 def zest_compute_channel_weights():
-
     def it_returns_balanced_channels():
         sigproc_params = SigprocV2Params(
             radiometry_channels=dict(aaa=0, bbb=1),
-            calibration=Calibration({
-                "regional_bg_mean.instrument_channel[0].test": [[100.0, 100.0], [100.0, 100.0]] ,
-                "regional_bg_mean.instrument_channel[1].test": [[200.0, 200.0], [200.0, 200.0]] ,
-            }),
+            calibration=Calibration(
+                {
+                    "regional_bg_mean.instrument_channel[0].test": [
+                        [100.0, 100.0],
+                        [100.0, 100.0],
+                    ],
+                    "regional_bg_mean.instrument_channel[1].test": [
+                        [200.0, 200.0],
+                        [200.0, 200.0],
+                    ],
+                }
+            ),
             instrument_subject_id="test",
         )
 
@@ -462,40 +481,68 @@ def zest_import_balanced_images():
     def it_remaps_and_balances_channels():
         sigproc_params = SigprocV2Params(
             radiometry_channels=dict(aaa=0, bbb=1),
-            calibration=Calibration({
-                "regional_illumination_balance.instrument_channel[0].test": [[1.0, 1.0], [1.0, 1.0]],
-                "regional_illumination_balance.instrument_channel[1].test": [[1.0, 1.0], [1.0, 1.0]],
-                "regional_bg_mean.instrument_channel[0].test": [[100.0, 100.0], [100.0, 100.0]],
-                "regional_bg_mean.instrument_channel[1].test": [[200.0, 200.0], [200.0, 200.0]],
-            }),
+            calibration=Calibration(
+                {
+                    "regional_illumination_balance.instrument_channel[0].test": [
+                        [1.0, 1.0],
+                        [1.0, 1.0],
+                    ],
+                    "regional_illumination_balance.instrument_channel[1].test": [
+                        [1.0, 1.0],
+                        [1.0, 1.0],
+                    ],
+                    "regional_bg_mean.instrument_channel[0].test": [
+                        [100.0, 100.0],
+                        [100.0, 100.0],
+                    ],
+                    "regional_bg_mean.instrument_channel[1].test": [
+                        [200.0, 200.0],
+                        [200.0, 200.0],
+                    ],
+                }
+            ),
             instrument_subject_id="test",
         )
         chcy_ims = np.ones((2, 1, 128, 128))
         chcy_ims[0] *= 1000.0
         chcy_ims[1] *= 2000.0
         balanced_ims = worker._import_balanced_images(chcy_ims, sigproc_params)
-        assert np.all(np.isclose( balanced_ims[0], (1000-100)*2 ))
-        assert np.all(np.isclose( balanced_ims[1], (2000-200)*1 ))
+        assert np.all(np.isclose(balanced_ims[0], (1000 - 100) * 2))
+        assert np.all(np.isclose(balanced_ims[1], (2000 - 200) * 1))
 
     def it_balances_regionally():
         sigproc_params = SigprocV2Params(
             radiometry_channels=dict(aaa=0, bbb=1),
-            calibration=Calibration({
-                "regional_illumination_balance.instrument_channel[0].test": [[1.0, 5.0], [1.0, 1.0]],
-                "regional_illumination_balance.instrument_channel[1].test": [[7.0, 1.0], [1.0, 1.0]],
-                "regional_bg_mean.instrument_channel[0].test": [[100.0, 100.0], [100.0, 100.0]],
-                "regional_bg_mean.instrument_channel[1].test": [[200.0, 200.0], [200.0, 200.0]],
-            }),
+            calibration=Calibration(
+                {
+                    "regional_illumination_balance.instrument_channel[0].test": [
+                        [1.0, 5.0],
+                        [1.0, 1.0],
+                    ],
+                    "regional_illumination_balance.instrument_channel[1].test": [
+                        [7.0, 1.0],
+                        [1.0, 1.0],
+                    ],
+                    "regional_bg_mean.instrument_channel[0].test": [
+                        [100.0, 100.0],
+                        [100.0, 100.0],
+                    ],
+                    "regional_bg_mean.instrument_channel[1].test": [
+                        [200.0, 200.0],
+                        [200.0, 200.0],
+                    ],
+                }
+            ),
             instrument_subject_id="test",
         )
         chcy_ims = np.ones((2, 1, 128, 128))
         chcy_ims[0] *= 1000.0
         chcy_ims[1] *= 2000.0
         balanced_ims = worker._import_balanced_images(chcy_ims, sigproc_params)
-        assert np.all(np.isclose(balanced_ims[0, 0, 0, 0], (1000-100) * 2))
-        assert np.all(np.isclose(balanced_ims[0, 0, 0, 127], (1000-100) * 2 * 5))
-        assert np.all(np.isclose(balanced_ims[1, 0, 0, 0], (2000-200) * 1 * 7))
-        assert np.all(np.isclose(balanced_ims[1, 0, 127, 0], (2000-200) * 1 ))
+        assert np.all(np.isclose(balanced_ims[0, 0, 0, 0], (1000 - 100) * 2))
+        assert np.all(np.isclose(balanced_ims[0, 0, 0, 127], (1000 - 100) * 2 * 5))
+        assert np.all(np.isclose(balanced_ims[1, 0, 0, 0], (2000 - 200) * 1 * 7))
+        assert np.all(np.isclose(balanced_ims[1, 0, 127, 0], (2000 - 200) * 1))
 
     zest()
 
@@ -586,13 +633,20 @@ def zest_composite_with_alignment_offsets_chcy_ims():
 
     def it_creates_a_single_composite_image():
         chcy_ims, true_aln_offsets = _ims()
-        comp_im = worker._composite_with_alignment_offsets_chcy_ims(chcy_ims, true_aln_offsets)
+        comp_im = worker._composite_with_alignment_offsets_chcy_ims(
+            chcy_ims, true_aln_offsets
+        )
         assert comp_im.ndim == 4
-        assert comp_im.shape[0] == chcy_ims.shape[0] and comp_im.shape[1] == chcy_ims.shape[1]
-        assert comp_im.shape[2] < chcy_ims.shape[2] or comp_im.shape[3] < chcy_ims.shape[3]
+        assert (
+            comp_im.shape[0] == chcy_ims.shape[0]
+            and comp_im.shape[1] == chcy_ims.shape[1]
+        )
+        assert (
+            comp_im.shape[2] < chcy_ims.shape[2] or comp_im.shape[3] < chcy_ims.shape[3]
+        )
         for cy in range(2):
             for ch in range(2):
-                diff = np.sum(comp_im[ch, cy+1, :, :] - comp_im[ch, cy, :, :])
+                diff = np.sum(comp_im[ch, cy + 1, :, :] - comp_im[ch, cy, :, :])
                 assert utils.np_within(diff, 0.0, 12_000)
 
     zest()
@@ -622,7 +676,7 @@ def zest_peak_radiometry():
                 .amps_constant(val=1_000)
                 .widths_uniform(1.5)
             )
-            peaks.locs = [(mea//2+off[0], mea//2+off[1])]
+            peaks.locs = [(mea // 2 + off[0], mea // 2 + off[1])]
             synth.CameraModel(bias=bg_mean, std=bg_std)
             im = s.render_chcy()[0, 0] - bg_mean
             return im, psf

@@ -37,12 +37,18 @@ Nomenclature
         The probability of an event
 """
 
-from plumbum import local
+import time
 import math
 import pandas as pd
 import numpy as np
 from scipy.spatial.distance import cdist
-from plaster.run.sim.sim_result import SimResult
+from plaster.run.sim.sim_result import (
+    SimResult,
+    ArrayResult,
+    DyeType,
+    RadType,
+    RecallType,
+)
 from plaster.tools.utils import utils
 from plaster.tools.zap import zap
 from plaster.tools.schema import check
@@ -410,7 +416,9 @@ def _step_6_compact_flu(flu, n_edmans, n_channels):
     return compact_flu, remainder_flu
 
 
-def _do_pep_sim(pep_seq_df, sim_params, n_samples):
+def _do_pep_sim(
+    pep_seq_df, sim_params, n_samples, output_dyemat, output_radmat, output_recall
+):
     """
     Run Virtual Fluorosequencing Monte-Carlo on one peptide.
 
@@ -482,6 +490,12 @@ def _do_pep_sim(pep_seq_df, sim_params, n_samples):
     n_channels = sim_params.n_channels
     n_cycles = sim_params.n_cycles
 
+    pep_i = pep_seq_df.pep_i.values[0]
+    assert np.all(pep_seq_df.pep_i == pep_i)
+
+    assert output_dyemat.shape[1] == n_samples
+    assert output_radmat.shape[1] == n_samples
+
     # STEP 1: Get the labelled flu and p_bright
     flu, p_bright = _step_1_create_flu_and_p_bright(pep_seq_df, sim_params)
 
@@ -541,75 +555,66 @@ def _do_pep_sim(pep_seq_df, sim_params, n_samples):
 
     if n_non_dark_samples == n_samples:
         # We got a full sampling
-        recall_fraction = recall_numer / recall_denom
-        dyemat = non_dark_dyemat
-        radmat = _step_5_make_radmat(dyemat, sim_params)
+        output_recall[pep_i] = recall_numer / recall_denom
+        output_dyemat[pep_i] = non_dark_dyemat.astype(DyeType)
+        output_radmat[pep_i] = _step_5_make_radmat(non_dark_dyemat, sim_params).astype(
+            RadType
+        )
     else:
-        # We could no obtain a full sample after many batches,
+        # We could not obtain a full sample after many batches,
         # declare this to be 100% dark.
         # To keep the code simpler, a zeros are returned for the dyemat, radmat
-        zeros = np.zeros_like(non_dark_dyemat)
-        dyemat = zeros
-        radmat = zeros
-        recall_fraction = np.nan  # It is really zero but this is a good sentinel
+        output_recall[pep_i] = 0.0
+        output_dyemat[pep_i] = np.zeros(non_dark_dyemat.shape, dtype=DyeType)
+        output_radmat[pep_i] = np.zeros(non_dark_dyemat.shape, dtype=RadType)
 
     compact_flu, remainder_flu = _step_6_compact_flu(
         flu, sim_params.n_edmans, sim_params.n_channels
     )
 
-    return dyemat, radmat, recall_fraction, compact_flu, remainder_flu
+    return compact_flu, remainder_flu
 
 
-def _run_sim(sim_params, pep_seqs_df, n_samples, progress):
+def _run_sim(sim_params, pep_seqs_df, name, n_peps, n_samples, progress):
     if sim_params.get("random_seed") is not None:
         # Increment so that train and test will be different
         sim_params.random_seed += 1
 
-    dyemats__radmats__recalls__flus__remainders = zap.df_groups(
+    np.random.seed(sim_params.random_seed)
+
+    dyemat = ArrayResult(
+        f"{name}_dyemat",
+        shape=(n_peps, n_samples, sim_params.n_channels, sim_params.n_cycles),
+        dtype=DyeType,
+        mode="w+",
+    )
+    radmat = ArrayResult(
+        f"{name}_radmat",
+        shape=(n_peps, n_samples, sim_params.n_channels, sim_params.n_cycles),
+        dtype=RadType,
+        mode="w+",
+    )
+    recall = ArrayResult(
+        f"{name}_recall", shape=(n_peps,), dtype=RecallType, mode="w+",
+    )
+
+    flus__remainders = zap.df_groups(
         _do_pep_sim,
         pep_seqs_df.groupby("pep_i"),
         sim_params=sim_params,
         n_samples=n_samples,
+        output_dyemat=dyemat,
+        output_radmat=radmat,
+        output_recall=recall,
         _progress=progress,
         _trap_exceptions=False,
         _process_mode=True,
     )
 
-    dyemat = np.array(utils.listi(dyemats__radmats__recalls__flus__remainders, 0))
-    radmat = np.array(utils.listi(dyemats__radmats__recalls__flus__remainders, 1))
+    flus = np.array(utils.listi(flus__remainders, 0))
+    flu_remainders = np.array(utils.listi(flus__remainders, 1))
 
-    n_peps, _n_samples, n_channels, n_cycles = dyemat.shape
-    assert _n_samples == n_samples
-
-    dyemat = dyemat.reshape(n_peps * n_samples, n_channels * n_cycles)
-    radmat = radmat.reshape(n_peps * n_samples, n_channels * n_cycles)
-
-    flus = np.array(utils.listi(dyemats__radmats__recalls__flus__remainders, 3))
-    flu_remainders = np.array(
-        utils.listi(dyemats__radmats__recalls__flus__remainders, 4)
-    )
-
-    true_pep_i = np.repeat(np.arange(n_peps), n_samples)
-
-    recalls = np.array(utils.listi(dyemats__radmats__recalls__flus__remainders, 2))
-    recalls_over_peps = np.repeat(recalls, n_samples)
-    assert recalls_over_peps.shape[0] == true_pep_i.shape[0]
-
-    # recalls of nan are a sentinel to indicate that those peptides are to be removed
-    all_dark_rows = np.argwhere(np.isnan(recalls_over_peps))
-    dyemat = np.delete(dyemat, all_dark_rows, axis=0)
-    radmat = np.delete(radmat, all_dark_rows, axis=0)
-    true_pep_i = np.delete(true_pep_i, all_dark_rows, axis=0)
-
-    assert np.all(np.any(dyemat > 0, axis=1))
-    assert np.all(np.any(radmat > 0, axis=1))
-
-    # CONVERT the nan recalls to zero
-    recalls = np.nan_to_num(recalls)
-
-    assert np.all((0.0 <= recalls) & (recalls <= 1.0))
-
-    return dyemat, radmat, true_pep_i, recalls, flus, flu_remainders
+    return dyemat, radmat, recall, flus, flu_remainders
 
 
 def sim(sim_params, prep_result, progress=None, pipeline=None):
@@ -621,8 +626,10 @@ def sim(sim_params, prep_result, progress=None, pipeline=None):
     the the error modes and radiometry noise is different in each set.
     """
 
-    # TODO: Is this correct? Shouldn't this be conditional?
-    sim_params.random_seed = 1
+    if sim_params.random_seed is None:
+        sim_params.random_seed = int(time.time())
+
+    np.random.seed(sim_params.random_seed)
 
     # CREATE a *training-set* for all peptides (real and decoy)
     if pipeline:
@@ -636,16 +643,21 @@ def sim(sim_params, prep_result, progress=None, pipeline=None):
     (
         train_dyemat,
         train_radmat,
-        train_true_pep_iz,
         train_recalls,
         train_flus,
         train_flu_remainders,
-    ) = _run_sim(sim_params, pep_seqs_with_decoys, n_samples=sim_params.n_samples_train, progress=progress)
+    ) = _run_sim(
+        sim_params,
+        pep_seqs_with_decoys,
+        name="train",
+        n_peps=n_peps,
+        n_samples=sim_params.n_samples_train,
+        progress=progress,
+    )
 
     if sim_params.is_survey:
         test_dyemat = None
         test_radmat = None
-        test_true_pep_iz = None
         test_recalls = None
         test_flus = None
         test_flu_remainders = None
@@ -657,20 +669,40 @@ def sim(sim_params, prep_result, progress=None, pipeline=None):
         (
             test_dyemat,
             test_radmat,
-            test_true_pep_iz,
             test_recalls,
             test_flus,
             test_flu_remainders,
-        ) = _run_sim(sim_params, prep_result.pepseqs__no_decoys(), n_samples=sim_params.n_samples_test, progress=progress)
+        ) = _run_sim(
+            sim_params,
+            prep_result.pepseqs__no_decoys(),
+            name="test",
+            n_peps=n_peps,
+            n_samples=sim_params.n_samples_test,
+            progress=progress,
+        )
 
-        # CHECK that the train and test are not identical
+        # CHECK that the train and test are not identical in SOME non_zero_row
         # If they are, there was some sort of RNG seed errors which might happen
         # for example if sub-processes failed to re-init their RNG seeds.
-        train_non_zero_rows = np.any(train_radmat > 0, axis=1)
-        train_rows = train_radmat[train_non_zero_rows][0:100]
-
-        test_non_zero_rows = np.any(test_radmat > 0, axis=1)
-        test_rows = test_radmat[test_non_zero_rows][0:100]
+        # Test this by looking at pep_i==1
+        non_zero_rows = np.any(train_radmat[1] > 0, axis=(1, 2))
+        non_zero_row_args = np.argwhere(non_zero_rows)[0:100]
+        train_rows = train_radmat[1, non_zero_row_args].reshape(
+            (
+                non_zero_row_args.shape[0],
+                non_zero_row_args.shape[1]
+                * train_radmat.shape[2]
+                * train_radmat.shape[3],
+            )
+        )
+        test_rows = test_radmat[1, non_zero_row_args].reshape(
+            (
+                non_zero_row_args.shape[0],
+                non_zero_row_args.shape[1]
+                * test_radmat.shape[2]
+                * test_radmat.shape[3],
+            )
+        )
 
         if train_rows.shape[0] > 0 and not sim_params.allow_train_test_to_be_identical:
             any_differences = np.any(np.diagonal(cdist(train_rows, test_rows)) != 0.0)
@@ -680,13 +712,11 @@ def sim(sim_params, prep_result, progress=None, pipeline=None):
         params=sim_params,
         train_dyemat=train_dyemat,
         train_radmat=train_radmat,
-        train_true_pep_iz=train_true_pep_iz,
         train_recalls=train_recalls,
         train_flus=train_flus,
         train_flu_remainders=train_flu_remainders,
         test_dyemat=test_dyemat,
         test_radmat=test_radmat,
-        test_true_pep_iz=test_true_pep_iz,
         test_recalls=test_recalls,
         test_flus=test_flus,
         test_flu_remainders=test_flu_remainders,

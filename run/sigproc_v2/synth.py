@@ -48,7 +48,9 @@ class Synth:
         self.dim = dim
         self.save_as = save_as
         self.models = []
-        self.aln_offsets = np.random.uniform(-20, 20, size=(self.n_cycles, 2)).astype(int)
+        self.aln_offsets = np.random.uniform(-20, 20, size=(self.n_cycles, 2)).astype(
+            int
+        )
         self.aln_offsets[0] = (0, 0)
         if not overwrite:
             assert Synth.synth is None

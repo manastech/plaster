@@ -723,7 +723,9 @@ class GenApp(cli.Application, GenFuncs):
             switches = self._switches_by_name
 
             if self.protein_random is not None:
-                info(f"Sampling {self.protein_random} random proteins from imported set")
+                info(
+                    f"Sampling {self.protein_random} random proteins from imported set"
+                )
                 n = len(self.derived_vals.protein)
                 assert n >= self.protein_random
                 self.derived_vals.protein = data.subsample(

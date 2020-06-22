@@ -17,16 +17,16 @@ def test_rf(
     progress=None,
     pipeline=None,
 ):
-    n_phases = 2 if test_rf_params.include_training_set else 1
+    n_phases = 6 if test_rf_params.include_training_set else 3
     classifier = train_rf_result.classifier
 
     if pipeline is not None:
         pipeline.set_phase(0, n_phases)
 
     test_pred_pep_iz, test_scores, test_all_class_scores = classifier.classify(
-        sim_result.test_radmat, test_rf_params.keep_all_class_scores, progress
+        sim_result.flat_test_radmat(), test_rf_params.keep_all_class_scores, progress
     )
-    test_true_pep_iz = sim_result.test_true_pep_iz
+    test_true_pep_iz = sim_result.test_true_pep_iz()
 
     # We do some PR calculation during the task so that this information is readily
     # available in results & notebooks don't need to recompute it (costly).
@@ -43,17 +43,24 @@ def test_rf(
         prep_result=prep_result,
         sim_result=sim_result,
     )
-    test_peps_pr = call_bag.pr_curve_by_pep()
+
+    if pipeline is not None:
+        pipeline.set_phase(1, n_phases)
+
+    if pipeline is not None:
+        pipeline.set_phase(2, n_phases)
+
+    test_peps_pr = call_bag.pr_curve_by_pep(progress=progress)
 
     # If there is abundance information, compute the abundance-adjusted PR
     # This call returns None if there is no abundance info avail.
-    test_peps_pr_abund = call_bag.pr_curve_by_pep_with_abundance()
+    test_peps_pr_abund = call_bag.pr_curve_by_pep_with_abundance(progress=progress)
 
     if test_rf_params.include_training_set:
         # Permit testing for over-fitting by classifying on the train data
 
         if pipeline is not None:
-            pipeline.set_phase(1, n_phases)
+            pipeline.set_phase(3, n_phases)
 
         real_pep_iz = prep_result.peps__no_decoys().pep_i.values
 
@@ -74,8 +81,16 @@ def test_rf(
             prep_result=prep_result,
             sim_result=sim_result,
         )
-        train_peps_pr = call_bag.pr_curve_by_pep()
-        train_peps_pr_abund = call_bag.pr_curve_by_pep_with_abundance()
+
+        if pipeline is not None:
+            pipeline.set_phase(4, n_phases)
+
+        train_peps_pr = call_bag.pr_curve_by_pep(progress=progress)
+
+        if pipeline is not None:
+            pipeline.set_phase(5, n_phases)
+
+        train_peps_pr_abund = call_bag.pr_curve_by_pep_with_abundance(progress=progress)
 
     else:
         (

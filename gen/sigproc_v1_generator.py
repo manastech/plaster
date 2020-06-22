@@ -24,6 +24,7 @@ class SigprocV1Generator(BaseGenerator):
         lnfit_name=None,
         lnfit_params=None,
         lnfit_dye_on_threshold=None,
+        lnfit_photometry_only=None,
         movie=False,
         n_frames_limit=None,
         radial_filter=None,

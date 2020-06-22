@@ -26,6 +26,11 @@ Example:
     with tmp_file(prefix="foo") as my_file:
         # my_file will be created under $ERISYON_TMP with a "foo" prefix
         save(foo, my_file)
+
+    with tmp_folder(chdir=True):
+        # my_file will be created in the temporary folder
+        save(foo, my_file)
+
 """
 import os
 import pickle
@@ -48,7 +53,7 @@ def _erisyon_tmp():
 
 
 @contextmanager
-def tmp_folder(remove=True, prefix=None):
+def tmp_folder(remove=True, prefix=None, chdir=False):
     """
     See examples above.
     """
@@ -56,10 +61,15 @@ def tmp_folder(remove=True, prefix=None):
     old_current_tmp_folder = _current_tmp_folder
     erisyon_tmp = _erisyon_tmp()
     tmp_path = local.path(tempfile.mkdtemp(dir=str(erisyon_tmp), prefix=prefix))
+    orig_cwd = local.cwd
     try:
         _current_tmp_folder = tmp_path
+        if chdir:
+            local.cwd.chdir(tmp_path)
         yield tmp_path
     finally:
+        if chdir:
+            local.cwd.chdir(orig_cwd)
         if remove:
             tmp_path.delete()
         _current_tmp_folder = old_current_tmp_folder

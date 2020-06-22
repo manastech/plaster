@@ -340,27 +340,4 @@ def zest_pr_curve_no_tied_scores_mean_recall():
     recall_at_thresh = cum_sum_correct / len(pred_pep_iz)
     recall_at_thresh = np.append([0.0], recall_at_thresh)
 
-    @zest.skip("s", "Need to redo this")
-    def it_computes_combined_pr():
-        p, r, s, a = cb.pr_curve(n_steps=10)
-        assert np.array_equal(p, prec_at_thresh)
-        assert np.array_equal(s, [1.0] + sorted(scores)[::-1])
-        assert np.allclose(
-            r, (recall_at_thresh * 0.2)
-        )  # mult by mean of train_calls for all peps
-
-    @zest.skip("s", "Need to redo this")
-    def it_computes_subset_pr():
-        p, r, s, a = cb.pr_curve(pep_iz_subset=[1], n_steps=10)
-        assert np.array_equal(p, [1, 1])
-        assert np.array_equal(s, [1, 0.80])
-        assert np.array_equal(
-            r, np.array([0, 0.25]) * 0.1
-        )  # mean train_recall of peptide 1
-
-        p, r, s, a = cb.pr_curve(pep_iz_subset=[2], n_steps=10)
-        assert np.array_equal(p, [1, 0, 0.5, 1 / 3, 1 / 4, 2 / 5])
-        assert np.array_equal(s, [1, 0.9, 0.85, 0.7, 0.6, 0.53])
-        assert np.array_equal(r, np.array([0, 0, 1 / 4, 1 / 4, 1 / 4, 2 / 4]) * 0.2)
-
     zest()

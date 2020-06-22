@@ -130,9 +130,16 @@ class SimParams(Params):
         they can be indexed by integers.
         """
         sim_dyes_df = pd.DataFrame(self.dyes)
+        assert len(sim_dyes_df) > 0
+
         sim_labels_df = pd.DataFrame(self.labels)
+        assert len(sim_labels_df) > 0
+
         error_model_dyes_df = pd.DataFrame(self.error_model.dyes)
+        assert len(error_model_dyes_df) > 0
+
         error_model_labels_df = pd.DataFrame(self.error_model.labels)
+        assert len(error_model_labels_df) > 0
 
         if len(sim_dyes_df) > 0:
             channel_df = (

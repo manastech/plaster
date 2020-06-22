@@ -1,13 +1,15 @@
-from munch import Munch
+from plumbum import local
 import numpy as np
 import pandas as pd
 from zest import zest
 from plaster.run.sim import sim_worker
 from plaster.run.sim.sim_params import SimParams
 from plaster.run.prep.prep_result import PrepResult
+from plaster.run.base_result import ArrayResult
 from plaster.run.error_model import ErrorModel
 from plaster.tools.log.log import debug
 from plaster.tools.utils.utils import npf, np_array_same
+from plaster.tools.utils import tmp
 
 
 def _stub_sim_params(error_model, n_samples):
@@ -451,65 +453,104 @@ def zest_step_6_compact_flu():
 
 def zest_do_pep_sim():
     sim_params = _stub_sim_params(no_error_model, 100)
+    dyemat, radmat, recall = None, None, None
 
-    def it_returns_no_all_dark_samples():
-        prep_result = PrepResult.stub_prep_result(
-            pros=[".", "ABCDEFGHI"],
-            pro_is_decoys=[False, False],
-            peps=[".", "AAA"],
-            pep_pro_iz=[0, 1],
+    def _make_arrays(name, n_peps, n_samples):
+        dyemat = ArrayResult(
+            f"{name}_dyemat",
+            shape=(n_peps, n_samples, sim_params.n_channels, sim_params.n_cycles),
+            dtype=np.uint8,
+            mode="w+",
         )
+        radmat = ArrayResult(
+            f"{name}_radmat",
+            shape=(n_peps, n_samples, sim_params.n_channels, sim_params.n_cycles),
+            dtype=np.float32,
+            mode="w+",
+        )
+        recall = ArrayResult(
+            f"{name}_recall", shape=(n_peps,), dtype=np.float32, mode="w+",
+        )
+        return dyemat, radmat, recall
 
-        pep_seq_df = prep_result.pepseqs()
+    def it_returns_no_all_dark_samples_on_valid_peps():
+        with tmp.tmp_folder(chdir=True):
+            prep_result = PrepResult.stub_prep_result(
+                pros=[".", "ABCDEFGHI"],
+                pro_is_decoys=[False, False],
+                peps=[".", "AAA"],
+                pep_pro_iz=[0, 1],
+            )
 
-        (
-            dyemat,
-            radmat,
-            recall_fraction,
-            compact_flu,
-            remainder_flu,
-        ) = sim_worker._do_pep_sim(pep_seq_df, sim_params, n_samples=1000)
-        assert not np.any(np.all(dyemat == 0.0, axis=(1, 2)))
+            pep_seq_df = prep_result.pepseqs()
+            n_samples = 1000
+            dyemat, radmat, recall = _make_arrays(
+                "test1", n_peps=2, n_samples=n_samples
+            )
+            sim_worker._do_pep_sim(
+                pep_seq_df[pep_seq_df.pep_i == 1],
+                sim_params,
+                n_samples=n_samples,
+                output_dyemat=dyemat,
+                output_radmat=radmat,
+                output_recall=recall,
+            )
+            assert not np.any(np.all(dyemat[1] == 0, axis=(1, 2)))
 
     def it_returns_the_fraction_of_all_dark_samples():
-        prep_result = PrepResult.stub_prep_result(
-            pros=[".", "ABCDEFGHI"],
-            pro_is_decoys=[False, False],
-            peps=[".", "ABB"],
-            pep_pro_iz=[0, 1],
-        )
+        with tmp.tmp_folder(chdir=True):
+            n_samples = 5000
+            sim_params = _stub_sim_params(
+                ErrorModel.from_defaults(n_channels=2), n_samples
+            )
+            prep_result = PrepResult.stub_prep_result(
+                pros=[".", "ABCDEFGHI"],
+                pro_is_decoys=[False, False],
+                peps=[".", "ABB"],
+                pep_pro_iz=[0, 1],
+            )
 
-        pep_seq_df = prep_result.pepseqs()
+            pep_seq_df = prep_result.pepseqs()
 
-        (
-            dyemat,
-            radmat,
-            recall_fraction,
-            compact_flu,
-            remainder_flu,
-        ) = sim_worker._do_pep_sim(pep_seq_df, sim_params, n_samples=1000)
-        assert np.all((0.9 < recall_fraction) & (recall_fraction <= 1.0))
-        # 0.9 because it seems unlikely that in 5000 attempts on a 0.95% call
-        # that you'd ever be off by that much.
+            dyemat, radmat, recall = _make_arrays(
+                "test1", n_peps=2, n_samples=n_samples
+            )
+            sim_worker._do_pep_sim(
+                pep_seq_df[pep_seq_df.pep_i == 1],
+                sim_params,
+                n_samples=n_samples,
+                output_dyemat=dyemat,
+                output_radmat=radmat,
+                output_recall=recall,
+            )
+            assert np.all((0.9 < recall[1]) & (recall[1] < 1.0))
+            # 0.9 because it seems unlikely that in 5000 attempts on a 0.95% call
+            # that you'd ever be off by that much.
 
     def it_gives_up_on_hard_peptides_and_returns_none():
-        prep_result = PrepResult.stub_prep_result(
-            pros=[".", "ABCDEFGHI"],
-            pro_is_decoys=[False, False],
-            peps=[".", "DDD"],
-            pep_pro_iz=[0, 1],
-        )
+        with tmp.tmp_folder(chdir=True):
+            prep_result = PrepResult.stub_prep_result(
+                pros=[".", "ABCDEFGHI"],
+                pro_is_decoys=[False, False],
+                peps=[".", "DDD"],
+                pep_pro_iz=[0, 1],
+            )
 
-        pep_seq_df = prep_result.pepseqs()
+            pep_seq_df = prep_result.pepseqs()
 
-        (
-            dyemat,
-            radmat,
-            recall_fraction,
-            compact_flu,
-            remainder_flu,
-        ) = sim_worker._do_pep_sim(pep_seq_df, sim_params, n_samples=1000)
-        assert np.all(np.isnan(recall_fraction))
+            n_samples = 1000
+            dyemat, radmat, recall = _make_arrays(
+                "test1", n_peps=2, n_samples=n_samples
+            )
+            sim_worker._do_pep_sim(
+                pep_seq_df[pep_seq_df.pep_i == 1],
+                sim_params,
+                n_samples=n_samples,
+                output_dyemat=dyemat,
+                output_radmat=radmat,
+                output_recall=recall,
+            )
+            assert np.all(recall[:] == 0.0)
 
     zest()
 
@@ -528,85 +569,112 @@ def zest_sim():
     n_cycles = 3  # mock + edman (See below)
 
     def it_maintains_decoys_for_train():
-        sim_params = _stub_sim_params(some_error_model, n_samples)
-        sim_result = sim_worker.sim(sim_params, prep_result)
-        assert sim_result.train_dyemat.shape == (
-            # -1 is because the nul is all-dark and thus dropped.
-            n_samples * (n_peptides - 1),
-            n_channels * n_cycles,
-        )
+        with tmp.tmp_folder(chdir=True):
+            sim_params = _stub_sim_params(some_error_model, n_samples)
+            sim_result = sim_worker.sim(sim_params, prep_result)
+            assert sim_result.train_dyemat.shape == (
+                n_peptides,
+                n_samples,
+                n_channels,
+                n_cycles,
+            )
 
     def it_removes_decoys_for_test():
-        sim_params = _stub_sim_params(some_error_model, n_samples)
-        sim_result = sim_worker.sim(sim_params, prep_result)
-        assert sim_result.test_dyemat.shape == (
-            # -2 because -1 is from the fact that the nul is all-dark and thus dropped.
-            # The other -1 is from the 1 peptide is from a decoy (what we're testing for)
-            n_samples * (n_peptides - 2),
-            n_channels * n_cycles,
-        )
+        with tmp.tmp_folder(chdir=True):
+            sim_params = _stub_sim_params(some_error_model, n_samples)
+            sim_result = sim_worker.sim(sim_params, prep_result)
+            assert sim_result.test_dyemat.shape == (
+                n_peptides,
+                n_samples,
+                n_channels,
+                n_cycles,
+            )
+            assert np.all(sim_result.test_dyemat[0] == 0)  # Nul should be all zero
+            assert np.all(sim_result.test_dyemat[4] == 0)  # Decoy should be all zero
+            assert sim_result.test_radmat.dtype == np.float32
 
     def it_raises_if_train_and_test_identical():
-        with zest.raises(in_message="are identical"):
-            sim_params = _stub_sim_params(no_error_model, n_samples)
-            sim_worker.sim(sim_params, prep_result)
+        with tmp.tmp_folder(chdir=True):
+            with zest.raises(in_message="are identical"):
+                sim_params = _stub_sim_params(no_error_model, n_samples)
+                sim_worker.sim(sim_params, prep_result)
 
     def it_drop_all_darks():
-        prep_result = PrepResult.stub_prep_result(
-            pros=[".", "DD", "EE"],
-            pro_is_decoys=[False, False, False],
-            peps=[".", "DD", "EE"],
-            pep_pro_iz=[0, 1, 2],
-        )
-        sim_params = _stub_sim_params(no_error_model, n_samples)
-        sim_result = sim_worker.sim(sim_params, prep_result)
-        assert sim_result.test_dyemat.shape == (0, n_channels * n_cycles)
-        assert sim_result.train_dyemat.shape == (0, n_channels * n_cycles)
-        assert np.all(sim_result.train_recalls == 0.0)
+        with tmp.tmp_folder(chdir=True):
+            prep_result = PrepResult.stub_prep_result(
+                pros=[".", "DD", "EE"],
+                pro_is_decoys=[False, False, False],
+                peps=[".", "DD", "EE"],
+                pep_pro_iz=[0, 1, 2],
+            )
+            n_peptides = 3
+            sim_params = _stub_sim_params(no_error_model, n_samples)
+            sim_result = sim_worker.sim(sim_params, prep_result)
+            assert sim_result.test_dyemat.shape == (
+                n_peptides,
+                n_samples,
+                n_channels,
+                n_cycles,
+            )
+            assert sim_result.test_dyemat.dtype == np.uint8
+            assert np.all(sim_result.test_dyemat[:] == 0)  # All dark
+
+            assert sim_result.train_dyemat.shape == (
+                n_peptides,
+                n_samples,
+                n_channels,
+                n_cycles,
+            )
+            assert sim_result.train_dyemat.dtype == np.uint8
+            assert np.all(sim_result.train_recalls[:] == 0.0)
 
     def it_generates_flu_info():
-        prep_result = PrepResult.stub_prep_result(
-            pros=[".", "XAXCD", "XAXCDXX", "XCCXX"],
-            pro_is_decoys=[False, False, False, False],
-            peps=[".", "XAXCD", "XAXCDXX", "XCCXX"],
-            pep_pro_iz=[0, 1, 2, 3],
-        )
-        sim_params = _stub_sim_params(some_error_model, n_samples)
-        sim_result = sim_worker.sim(sim_params, prep_result)
-        sim_result._generate_flu_info(prep_result)
+        with tmp.tmp_folder(chdir=True):
+            prep_result = PrepResult.stub_prep_result(
+                pros=[".", "XAXCD", "XAXCDXX", "XCCXX"],
+                pro_is_decoys=[False, False, False, False],
+                peps=[".", "XAXCD", "XAXCDXX", "XCCXX"],
+                pep_pro_iz=[0, 1, 2, 3],
+            )
+            sim_params = _stub_sim_params(some_error_model, n_samples)
+            sim_result = sim_worker.sim(sim_params, prep_result)
+            sim_result._generate_flu_info(prep_result)
 
-        def it_computes_head_and_tail():
-            _flus = sim_result._flus
-            assert np.all(_flus[_flus.pep_i.isin([1, 2])].flu_count == 2)
-            assert np.all(_flus[_flus.pep_i.isin([1, 2])].n_head_ch_0 == 1)
-            assert np.all(_flus[_flus.pep_i.isin([1, 2])].n_head_ch_1 == 0)
-            assert np.all(_flus[_flus.pep_i.isin([1, 2])].n_tail_ch_0 == 0)
-            assert np.all(_flus[_flus.pep_i.isin([1, 2])].n_tail_ch_1 == 1)
-            assert np.all(_flus[_flus.pep_i == 3].flu_count == 1)
+            def it_computes_head_and_tail():
+                _flus = sim_result._flus
+                assert np.all(_flus[_flus.pep_i.isin([1, 2])].flu_count == 2)
+                assert np.all(_flus[_flus.pep_i.isin([1, 2])].n_head_ch_0 == 1)
+                assert np.all(_flus[_flus.pep_i.isin([1, 2])].n_head_ch_1 == 0)
+                assert np.all(_flus[_flus.pep_i.isin([1, 2])].n_tail_ch_0 == 0)
+                assert np.all(_flus[_flus.pep_i.isin([1, 2])].n_tail_ch_1 == 1)
+                assert np.all(_flus[_flus.pep_i == 3].flu_count == 1)
 
-        def it_peps__flus():
-            df = sim_result.peps__flus(prep_result)
-            assert "flustr" in df
-            assert len(df) == 4
+            def it_peps__flus():
+                df = sim_result.peps__flus(prep_result)
+                assert "flustr" in df
+                assert len(df) == 4
 
-        def it_peps__flus__unique_flus():
-            df = sim_result.peps__flus__unique_flus(prep_result)
-            assert np.all(df.pep_i.values == [0, 3])
+            def it_peps__flus__unique_flus():
+                df = sim_result.peps__flus__unique_flus(prep_result)
+                assert np.all(df.pep_i.values == [0, 3])
 
-        zest()
+            zest()
 
     def it_surveys():
-        n_samples = 1
-        sim_params = _stub_sim_params(some_error_model, n_samples)
-        sim_params.is_survey = True
-        sim_params.n_samples_train = n_samples
-        sim_params.n_samples_test = None
-        sim_result = sim_worker.sim(sim_params, prep_result)
-        assert sim_result.train_dyemat.shape == (
-            # -1 is because the nul is all-dark and thus dropped.
-            n_samples * (n_peptides - 1),
-            n_channels * n_cycles,
-        )
-        assert sim_result.test_dyemat is None
+        with tmp.tmp_folder(chdir=True):
+            n_samples = 1
+            sim_params = _stub_sim_params(some_error_model, n_samples)
+            sim_params.is_survey = True
+            sim_params.n_samples_train = n_samples
+            sim_params.n_samples_test = None
+            sim_result = sim_worker.sim(sim_params, prep_result)
+            assert sim_result.train_dyemat.shape == (
+                n_peptides,
+                n_samples,
+                n_channels,
+                n_cycles,
+            )
+            assert sim_result.train_dyemat.dtype == np.uint8
+            assert sim_result.test_dyemat is None
 
     zest()

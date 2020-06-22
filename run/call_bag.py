@@ -6,7 +6,7 @@ from plaster.tools.utils.data import ConfMat
 from plaster.tools.utils import utils
 from plaster.tools.aaseq.aaseq import aa_str_to_list
 from plaster.tools.zap import zap
-from plaster.tools.log.log import info
+from plaster.tools.log.log import info, debug, prof
 
 
 def _do_pep_pr_curve(bag, pep_i):
@@ -282,16 +282,16 @@ class CallBag:
         zero_padded_dx = np.concatenate(([0], x))
         return (np.diff(zero_padded_dx) * y).sum()
 
-    def pr_curve(self, pep_iz_subset=None, n_steps=50):
+    def pr_curve_old(self, pep_iz_subset=None, n_steps=50):
         """
         See: https://docs.google.com/document/d/1MW92KNTaNtuL1bR_p0U1FwfjaiomHD3fRldiSVF74pY/edit#bookmark=id.4nqatzscuyw7
-
         Unlike sklearn's implementation, this one samples scores
         uniformly to prevents returning gigantic arrays.
-
         Returns a tuple of arrays; each row of the arrays is an increasing score threshold. The arrays are:
             * precision, recall, score_thresh, area_under_curve
         """
+
+        # TODO: Remove oncve I'm confident that the new is the same
 
         # Obtain a reverse sorted calls: true, pred, score
         true = self.df["true_pep_iz"].values
@@ -409,6 +409,154 @@ class CallBag:
             filtered_prsa[:, 3],  # AUC
         )
 
+    def pr_curve_new(self, pep_iz_subset=None, n_steps=50):
+        """
+        See: https://docs.google.com/document/d/1MW92KNTaNtuL1bR_p0U1FwfjaiomHD3fRldiSVF74pY/edit#bookmark=id.4nqatzscuyw7
+
+        Unlike sklearn's implementation, this one samples scores
+        uniformly to prevents returning gigantic arrays.
+
+        Returns a tuple of arrays; each row of the arrays is an increasing score threshold. The arrays are:
+            * precision, recall, score_thresh, area_under_curve
+        """
+
+        # Obtain a reverse sorted calls: true, pred, score
+        true = self.df["true_pep_iz"].values
+        pred = self.df["pred_pep_iz"].values
+        scores = self.df["scores"].values
+
+        # At this point true, pred, scores are sorted WHOLE SET OF ALL PEPTIDES
+
+        # If a subset is not request then assume ALL are wanted
+        if pep_iz_subset is None:
+            pep_iz_subset = np.unique(
+                np.concatenate((self.df.true_pep_iz[1:], self.df.pred_pep_iz))
+                # 1: => don't include the null peptide class from true
+            )
+
+        # MASK calls in the subset
+        true_in_subset_mask = np.isin(true, pep_iz_subset)
+        pred_in_subset_mask = np.isin(pred, pep_iz_subset)
+
+        # In the old code true, pred, score were the WHOLE SET
+        # and then pred_ and true_in_subset_mask were MASKS IN THIE WHOLE SET
+
+        # At this point, true_ and pred_in_subset_mask are masks on the original set.
+        # We now reduce to the set of interest so that we sort a smaller set
+        true_or_pred_subset_mask = true_in_subset_mask | pred_in_subset_mask
+        true = true[true_or_pred_subset_mask]
+        pred = pred[true_or_pred_subset_mask]
+        scores = scores[true_or_pred_subset_mask]
+        true_in_subset_mask = true_in_subset_mask[true_or_pred_subset_mask]
+        pred_in_subset_mask = pred_in_subset_mask[true_or_pred_subset_mask]
+
+        # Now sort on a smaller set
+        sorted_iz = np.argsort(scores)[::-1]
+        true = true[sorted_iz]
+        pred = pred[sorted_iz]
+        scores = scores[sorted_iz]
+        true_in_subset_mask = true_in_subset_mask[sorted_iz]
+        pred_in_subset_mask = pred_in_subset_mask[sorted_iz]
+
+        # How many true are in the subset? This will be
+        # used as the denominator of recall.
+        n_true_in_subset = true_in_subset_mask.sum()
+
+        # WALK through scores linearlly from high to low, starting
+        # at (1.0 - step_size) so that the first group has contents.
+        step_size = 1.0 / n_steps
+
+        # prsa sdtands for "Precision Recall Score Area_under_curve"
+        prsa = np.zeros((n_steps, 4))
+        precision_column = 0
+        recall_column = 1
+        score_thresh_column = 2
+        auc_column = 3
+
+        for prsa_i, score_thresh in enumerate(np.linspace(1 - step_size, 0, n_steps)):
+            # i is the index where *ALL* scores before this point are greater
+            # than or equal to the score_thresh. Note that because many calls
+            # may have *tied* scores, we use np_arg_last_where to pick the
+            # *last* position (ie lowest score) where the statement is true.
+            i = utils.np_arg_last_where(scores >= score_thresh)
+            if i is None:
+                prsa[prsa_i] = (0.0, 0.0, score_thresh, 0.0)
+            else:
+                correct_at_i_mask = true[0 : i + 1] == pred[0 : i + 1]
+                pred_at_i_mask = pred_in_subset_mask[0 : i + 1]
+
+                # At i, count:
+                #  * How many of the subset of interest have been predicted?
+                #    This will be used as the denominator of precision.
+                #  * How many correct calls of the subset have been made?
+                #    This is the numerator of precision and recall.
+                #  Note that for the correct, the masking doesn't matter if
+                #  we choose the true_mask or pred_mask because they are they same
+                #  in the case of a correct call.
+                n_pred_at_i = pred_at_i_mask.sum()
+                n_correct_and_in_subset_at_i = (
+                    correct_at_i_mask  # & pred_at_i_mask
+                ).sum()
+
+                prsa[prsa_i] = (
+                    # Precision: Fraction of those that were called apples at i that were in fact apples
+                    utils.np_safe_divide(n_correct_and_in_subset_at_i, n_pred_at_i),
+                    # Recall: Fraction of all apples that were called apples at i
+                    utils.np_safe_divide(
+                        n_correct_and_in_subset_at_i, n_true_in_subset
+                    ),
+                    # Score threshold is stepping down linearly
+                    score_thresh,
+                    0.0,
+                )
+                # The Area under the curve up to this point (requires two points)
+                prsa[prsa_i, auc_column] = self._auc(
+                    prsa[0 : prsa_i + 1, recall_column],
+                    prsa[0 : prsa_i + 1, precision_column],
+                )
+
+        # CORRECT for the prior-recall.
+        # During simulation some rows may be all-dark.
+        # Those are accounted for here by scaling down the recall by
+        # the fraction of non-dark rows / all rows.
+        # This is done as MEAN of all recalls over the set of interest.
+
+        # EXTRACT training recalls from the subset of peps.
+        # This will leave NANs for all those that are not in the subset.
+        if self._sim_result is not None:
+            filtered_pep_recalls = np.full_like(self._sim_result.train_recalls, np.nan)
+            filtered_pep_recalls[pep_iz_subset] = self._sim_result.train_recalls[
+                pep_iz_subset
+            ]
+        else:
+            filtered_pep_recalls = np.full((prsa.shape[0],), 1.0)
+
+        # Use nanmean to ignore al those nans (the peps not in the subset)
+        # And then use np.nan_to_num in case the subset was empty, we want get 0 not nan
+        mean_recall = np.nan_to_num(np.nanmean(filtered_pep_recalls))
+        assert 0.0 <= mean_recall <= 1.0
+
+        # SCALE-DOWN all recall
+        prsa[:, recall_column] *= mean_recall
+
+        # SKIP all initial rows where the recall is zero, these clutter up the graph
+        # The return may thus have fewer than n_steps rows.
+        first_non_zero_i = utils.np_arg_first_where(prsa[:, recall_column] > 0.0)
+
+        filtered_prsa = prsa[first_non_zero_i:]
+
+        assert np.all(np.diff(filtered_prsa[:, 2]) <= 0.0)
+
+        return (
+            filtered_prsa[:, 0],  # Precision
+            filtered_prsa[:, 1],  # Recall
+            filtered_prsa[:, 2],  # Score thresholds
+            filtered_prsa[:, 3],  # AUC
+        )
+
+    def pr_curve(self, *args, **kwargs):
+        return self.pr_curve_new(*args, **kwargs)
+
     def pr_curve_sklearn(self, pep_i):
         """
         See: https://docs.google.com/document/d/1MW92KNTaNtuL1bR_p0U1FwfjaiomHD3fRldiSVF74pY/edit#bookmark=id.4nqatzscuyw7
@@ -451,7 +599,9 @@ class CallBag:
 
         return prsa
 
-    def pr_curve_by_pep(self, return_auc=False, pep_iz=None, force_compute=False):
+    def pr_curve_by_pep(
+        self, return_auc=False, pep_iz=None, force_compute=False, progress=None
+    ):
         """
         Obtain pr_curves for every peptide.
 
@@ -481,12 +631,14 @@ class CallBag:
             pep_iz = pep_iz.tolist()
         check.list_t(pep_iz, int)
 
+        # prof()
         results = zap.work_orders(
             [Munch(fn=_do_pep_pr_curve, pep_i=pep_i, bag=self,) for pep_i in pep_iz],
             _process_mode=False,
             _trap_exceptions=False,
-            _progress=None,
+            # _progress=progress,
         )
+        # prof("prs")
 
         df_per_pep = [
             pd.DataFrame(
@@ -522,6 +674,7 @@ class CallBag:
         n_steps=50,
         pep_abundance=None,
         force_compute=False,
+        progress=None,
     ):
         """
         In principle the same computation as pr_curve_by_pep (which uses pr_curve())
@@ -573,6 +726,8 @@ class CallBag:
         # auc_column = 3
 
         for prsa_i, score_thresh in enumerate(np.linspace(1 - step_size, 0, n_steps)):
+            if progress:
+                progress(prsa_i, n_steps, retry=False)
             # TODO: could opimize this by subselecting pep_iz for conf_mat if we're not
             # doing all peps - creates smaller confusion matrix.
             conf_mat = self.conf_mat_at_score_threshold(score_thresh)
@@ -646,7 +801,7 @@ class CallBag:
         return s_at_prec
 
     def conf_mat_at_score_threshold(self, score_thresh):
-        return self.conf_mat(mask=self.scores >= score_thresh)
+        return self.conf_mat(mask=self.scores >= score_thresh.astype(self.scores.dtype))
 
     def false_rates_by_pep(self, pep_i, at_prec, n_false):
         """

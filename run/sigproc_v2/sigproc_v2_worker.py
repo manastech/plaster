@@ -757,6 +757,7 @@ def calibrate(ims_import_res, n_best_fields=6, divs=5, metadata=None, progress=N
 # Step 1: Order channels, regional balance and channel equalize
 # -------------------------------------------------------------------------------
 
+
 def _compute_channel_weights(sigproc_params):
     """
     Import channels and order them into the output order
