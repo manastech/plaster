@@ -50,7 +50,7 @@ def zest_PrepResult():
         )
 
         # normalize pros as lists of strings
-        pros = list(map(lambda x: x if isinstance(x, list) else list(x), pros))
+        pros = [pro if isinstance(pro, list) else list(pro) for pro in pros]
 
         # extract peps from pros definitions
         peps_lens = [list(map(len, pro)) for pro in pros]
@@ -104,13 +104,17 @@ def zest_PrepResult():
             assert pros.index.tolist() == list(range(len(pros)))
 
         def it_includes_abundances_if_in_params_proteins():
-            nonlocal result
             assert "abundance" not in result.pros().columns
 
-            result = _make_prep_result(
+            result_with_abundances = _make_prep_result(
                 [".", ["ABC", "DEF"], "XXD"], abundances=[None, 5, 10]
             )
-            assert "abundance" in result.pros().columns
+            assert "abundance" in result_with_abundances.pros().columns
+            assert np.array_equal(
+                result_with_abundances.pros().abundance.tolist(),
+                [np.nan, 5, 10],
+                equal_nan=True,
+            )
 
         def it_gets_n_pros():
             assert result.n_pros == 3
@@ -123,28 +127,27 @@ def zest_PrepResult():
             assert len(pros_abundance) == result.n_pros
 
             def it_converts_nans_to_zero():
-                nonlocal pros_abundance
-                assert np.all([not np.isnan(x) for x in pros_abundance])
+                assert np.array_equal(pros_abundance, [0, 5, 10])
 
             zest()
 
         def it_gets_pros__ptm_locs():
             with_ptm_locs = result.pros__ptm_locs()
             assert len(with_ptm_locs) == 1
-            assert np.all(with_ptm_locs.pro_ptm_locs != "")
             assert with_ptm_locs.columns.tolist() == PrepResult.pros_columns
+            assert with_ptm_locs.pro_ptm_locs.tolist() == ["2;4"]
 
         def it_gets_pros__from_decoys():
             from_decoys = result.pros__from_decoys()
             assert len(from_decoys) == 1
-            assert np.all(from_decoys.pro_is_decoy)
             assert from_decoys.columns.tolist() == PrepResult.pros_columns
+            assert from_decoys.pro_id.tolist() == ["id_2"]
 
         def it_gets_pros__no_decoys():
             no_decoys = result.pros__no_decoys()
             assert len(no_decoys) == 2
-            assert not np.any(no_decoys.pro_is_decoy)
             assert no_decoys.columns.tolist() == PrepResult.pros_columns
+            assert no_decoys.pro_id.tolist() == ["id_0", "id_1"]
 
         def it_gets_proseqs():
             proseqs = result.proseqs()
@@ -194,7 +197,7 @@ def zest_PrepResult():
             assert result.n_pros_of_interest == 2
 
         def it_asserts_protein_ids():
-            with zest.raises(Exception):
+            with zest.raises(AssertionError):
                 result.set_pros_of_interest("P1")
 
         def it_sets_pro_ptm_locs():
@@ -252,6 +255,8 @@ def zest_PrepResult():
         def it_gets_peps__no_decoys():
             no_decoys = result.peps__no_decoys()
             assert len(no_decoys) == 2
+            assert no_decoys.pep_i.tolist() == [1, 2]
+            assert no_decoys.pro_i.tolist() == [1, 1]
             assert no_decoys.columns.tolist() == PrepResult.peps_columns
 
             def it_handles_empty_return():
@@ -263,6 +268,8 @@ def zest_PrepResult():
         def it_gets_peps__from_decoys():
             from_decoys = result.peps__from_decoys()
             assert len(from_decoys) == 3
+            assert from_decoys.pep_i.tolist() == [0, 3, 4]
+            assert from_decoys.pro_i.tolist() == [0, 2, 2]
             assert from_decoys.columns.tolist() == PrepResult.peps_columns
 
             def it_handles_empty_return():
