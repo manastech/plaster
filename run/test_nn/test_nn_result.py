@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from plaster.run.base_result import BaseResult
+from plaster.run.base_result import BaseResult, ArrayResult
 from plaster.run.test_nn.test_nn_params import TestNNParams
 
 
@@ -10,29 +10,25 @@ class TestNNResult(BaseResult):
 
     required_props = dict(
         params=TestNNParams,
-        test_true_pep_iz=np.ndarray,
-        test_dt_mat=np.ndarray,
+        test_true_pep_iz=ArrayResult,
+        test_dt_mat=ArrayResult,
         test_dyetracks_df=pd.DataFrame,
         test_dt_pep_sources_df=pd.DataFrame,
-        test_true_dt_iz=np.ndarray,
-        test_pred_dt_iz=np.ndarray,
-        test_dt_scores=np.ndarray,
-        test_pred_pep_iz=np.ndarray,
-        test_pep_scores=np.ndarray,
-        test_scores=np.ndarray,
-        test_vdists=np.ndarray,
+        test_true_dt_iz=ArrayResult,
+        test_pred_dt_iz=ArrayResult,
+        test_dt_scores=ArrayResult,
+        test_pred_pep_iz=ArrayResult,
+        test_scores=ArrayResult,
         test_peps_pr=(type(None), pd.DataFrame),
         test_peps_pr_abund=(type(None), pd.DataFrame),
-        train_true_pep_iz=(type(None), np.ndarray),
-        train_dt_mat=(type(None), np.ndarray),
+        train_true_pep_iz=(type(None), ArrayResult),
+        train_dt_mat=(type(None), ArrayResult),
         train_dyetracks_df=(type(None), pd.DataFrame),
         train_dt_pep_sources_df=(type(None), pd.DataFrame),
-        train_pred_dt_iz=(type(None), np.ndarray),
-        train_dt_scores=(type(None), np.ndarray),
-        train_pred_pep_iz=(type(None), np.ndarray),
-        train_pep_scores=(type(None), np.ndarray),
-        train_scores=(type(None), np.ndarray),
-        train_vdists=(type(None), np.ndarray),
+        train_pred_dt_iz=(type(None), ArrayResult),
+        train_dt_scores=(type(None), ArrayResult),
+        train_pred_pep_iz=(type(None), ArrayResult),
+        train_scores=(type(None), ArrayResult),
         train_peps_pr=(type(None), pd.DataFrame),
         train_peps_pr_abund=(type(None), pd.DataFrame),
     )

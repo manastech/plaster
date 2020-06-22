@@ -2,11 +2,10 @@ from zest import zest
 
 # Hint: use stub_prep_result
 
+
 @zest.skip("m", "Manas")
 def zest_PrepResult():
-
     def pros():
-
         def it_gets_a_dataframe_with_pro_id_index():
             raise NotImplementedError
 

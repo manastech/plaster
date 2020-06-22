@@ -54,6 +54,9 @@ class BaseGenerator(Munch):
             lnfit_dye_on_threshold=s.is_list(
                 s.is_int(), noneable=True, help="See Main Help"
             ),
+            lnfit_photometry_only=s.is_list(
+                s.is_str(), noneable=True, help="See Main Help"
+            ),
         )
     )
 
@@ -172,6 +175,7 @@ class BaseGenerator(Munch):
 
         super().__init__(**kwargs)
         self.apply_defaults()
+        debug(self)
         self.setup_err_model()
         self.validate()
 
@@ -300,6 +304,9 @@ class BaseGenerator(Munch):
 
             dye_thresholds = self.lnfit_dye_on_threshold
             lnfit_names = self.lnfit_name or ([None] * len(self.lnfit_params))
+            photometries_only = self.lnfit_photometry_only or (
+                [True] * len(self.lnfit_params)
+            )
 
             if len(self.lnfit_params) > 1 and len(dye_thresholds) == 1:
                 dye_thresholds *= len(self.lnfit_params)
@@ -307,12 +314,16 @@ class BaseGenerator(Munch):
             assert len(self.lnfit_params) == len(dye_thresholds)
             assert len(self.lnfit_params) == len(lnfit_names)
 
-            for i, (params, thresh, name) in enumerate(
-                zip(self.lnfit_params, dye_thresholds, lnfit_names)
+            for i, (params, thresh, name, photometry_only) in enumerate(
+                zip(self.lnfit_params, dye_thresholds, lnfit_names, photometries_only)
             ):
                 task = task_templates.lnfit()
                 task.lnfit.parameters["lognormal_fitter_v2_params"] = params
                 task.lnfit.parameters["dye_on_threshold"] = thresh
+                task.lnfit.parameters["photometry_only"] = photometry_only.lower() in (
+                    "true",
+                    "1",
+                )
 
                 task_name = "lnfit"
                 if len(self.lnfit_params) > 1 or name:

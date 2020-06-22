@@ -50,9 +50,14 @@ COPY --from=pip-image /venv/.venv /venv/.venv
 COPY . .
 
 ENV ERISYON_TMP="/tmp"
-ENV VIRTUAL_ENV=/.venv
+ENV VIRTUAL_ENV=/venv/.venv
 RUN python3 -m virtualenv --python=/usr/bin/python3 $VIRTUAL_ENV
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+ENV ERISYON_ROOT=/erisyon
+# if PYTHONPATH changes please call it out explicitly in PR, we need to keep it
+# in sync with our internal codebase
+ENV PYTHONPATH="${ERISYON_ROOT}:${ERISYON_ROOT}/overloads:${ERISYON_ROOT}/plaster/vendor:${VIRTUAL_ENV}/lib/python3.8/site-packages"
+ENV PATH="${VIRTUAL_ENV}/bin:${ERISYON_ROOT}:${ERISYON_ROOT}/plaster:${PATH}"
 
 # The gid bit (2XXX) on /root and /home so that all files created in there
 # will be owned by the group root. This is so that when the container is run

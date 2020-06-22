@@ -1,8 +1,16 @@
 import pandas as pd
 import numpy as np
 from plaster.tools.utils import utils
-from plaster.run.base_result import BaseResult
+from plaster.run.base_result import BaseResult, ArrayResult
 from plaster.run.sim.sim_params import SimParams
+
+
+DyeType = np.uint8
+DyeWeightType = np.float32
+RadType = np.float32
+IndexType = np.uint32
+RecallType = np.float32
+ScoreType = np.float32
 
 
 class SimResult(BaseResult):
@@ -11,18 +19,16 @@ class SimResult(BaseResult):
 
     required_props = dict(
         params=SimParams,
-        train_dyemat=np.ndarray,
-        train_radmat=np.ndarray,
-        train_true_pep_iz=np.ndarray,
-        train_recalls=np.ndarray,
+        train_dyemat=ArrayResult,  # (n_peps, n_samples, n_channels, n_cycles):uint8
+        train_radmat=ArrayResult,  # (n_peps, n_samples, n_channels, n_cycles):float32
+        train_recalls=ArrayResult,  # (n_peps):float32
         train_flus=np.ndarray,
         train_flu_remainders=np.ndarray,
-        test_dyemat=(type(None), np.ndarray),
-        test_radmat=(type(None), np.ndarray),
-        test_true_pep_iz=(type(None), np.ndarray),
+        test_dyemat=(type(None), ArrayResult),
+        test_radmat=(type(None), ArrayResult),
         test_flus=(type(None), np.ndarray),
         test_flu_remainders=(type(None), np.ndarray),
-        test_recalls=(type(None), np.ndarray),
+        test_recalls=(type(None), ArrayResult),
         _flus=pd.DataFrame,
     )
 
@@ -110,26 +116,32 @@ class SimResult(BaseResult):
             df.set_index("flustr").join(df_flu_count.set_index("flustr")).reset_index()
         )
 
-    def flat(self, mat_name):
-        """
-        Used to extract a flattened form of a mat.
-        Example:
-            run.sim.flat("train_dyemat")  # returns a 2D mat instead of 3D
-        """
-        mat = self.__getattr__(mat_name)
-        assert mat.ndim > 2
-        return utils.mat_flatter(mat)
+    def flat_train_radmat(self):
+        shape = self.train_dyemat.shape
+        return self.train_radmat.reshape((shape[0] * shape[1], shape[2] * shape[3]))
 
-    def unflat(self, mat_name):
-        """
-        Used to extract an un-flattened form of a mat (rows, channels, cycles)
-        Example:
-            run.sim.unflat("train_dyemat")  # returns a 3D mat instead of 2D
-        """
-        n_channels, n_cycles = self.params.n_channels_and_cycles
-        mat = self.__getattr__(mat_name)
-        assert mat.ndim == 2
-        return utils.mat_lessflat(mat, n_channels, n_cycles)
+    def flat_test_radmat(self):
+        shape = self.test_dyemat.shape
+        return self.test_radmat.reshape((shape[0] * shape[1], shape[2] * shape[3]))
+
+    def train_true_pep_iz(self):
+        shape = self.train_dyemat.shape
+        return np.repeat(np.arange(shape[0]).astype(IndexType), shape[1])
+
+    def test_true_pep_iz(self):
+        shape = self.test_dyemat.shape
+        return np.repeat(np.arange(shape[0]).astype(IndexType), shape[1])
+
+    # def unflat(self, mat_name):
+    #     """
+    #     Used to extract an un-flattened form of a mat (rows, channels, cycles)
+    #     Example:
+    #         run.sim.unflat("train_dyemat")  # returns a 3D mat instead of 2D
+    #     """
+    #     n_channels, n_cycles = self.params.n_channels_and_cycles
+    #     mat = self.__getattr__(mat_name)
+    #     assert mat.ndim == 2
+    #     return utils.mat_lessflat(mat, n_channels, n_cycles)
 
     # def pep_i_to_flu_brightness(self, n_peps):
     #     """

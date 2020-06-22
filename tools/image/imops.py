@@ -81,7 +81,6 @@ def generate_gauss_kernel(
     return low_res_im / np.sum(low_res_im)
 
 
-
 def generate_circle_mask(rad, size=None):
     """Generate boolean mask: True inside the circle, False outside. If size is None it is the diameter"""
     diam = (rad + 1) * 2 - 1

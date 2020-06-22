@@ -1,7 +1,88 @@
+import numpy as np
 from plumbum import local
 from plaster.tools.utils import utils
 from munch import Munch
 from plaster.tools.log.log import debug
+
+
+class ArrayResult:
+    """
+    A common result type is a large array that is larger than memory.
+    Instances of this class allow those to be written to files and then
+    streamed as needed.
+    """
+
+    def __init__(self, filename, dtype, shape, mode="r", offset=0, order="C"):
+        self._fp = None
+        self.filename = filename
+        self.dtype = dtype
+        self.shape = shape
+        self.mode = mode
+        self.offset = offset
+        self.order = order
+        self.arr()
+
+    def arr(self):
+        if self._fp is None:
+            self._fp = np.memmap(
+                self.filename,
+                dtype=self.dtype,
+                shape=self.shape,
+                mode=self.mode,
+                offset=self.offset,
+                order=self.order,
+            )
+        return self._fp
+
+    def flush(self):
+        if self._fp is not None:
+            self._fp.flush()
+
+    def reshape(self, new_shape):
+        """Will truncate the size of the memory mapped file if getting smaller"""
+        self.arr().base.resize(np.product(new_shape) * self.arr().itemsize)
+        self.flush()
+        del self._fp
+        self._fp = None
+        self.shape = new_shape
+        if self.mode == "w+":
+            # In the case that this was originally opened to overwrite
+            # now that it has been truncated and will re-open on the
+            # next call to arr() we must ensure that it doesn't overwrite
+            # by changing the mode to "r+"
+            self.mode = "r+"
+
+    def __getstate__(self):
+        self.flush()
+        return (
+            self.filename,
+            self.dtype,
+            self.shape,
+            self.mode,
+            self.offset,
+            self.order,
+        )
+
+    def __setstate__(self, state):
+        self._fp = None
+        (
+            self.filename,
+            self.dtype,
+            self.shape,
+            self.mode,
+            self.offset,
+            self.order,
+        ) = state
+        # When re-loading, kick it in to read-only
+        self.mode = "r"
+
+    def __getitem__(self, index):
+        fp = self.arr()
+        return fp[index]
+
+    def __setitem__(self, index, val):
+        fp = self.arr()
+        fp[index] = val
 
 
 class BaseResult(Munch):
@@ -103,32 +184,35 @@ class BaseResult(Munch):
             _folder = object.__getattribute__(self, "_folder")
             filename = object.__getattribute__(self, "filename")
 
-            utils.indexed_pickler_load(
-                _folder / filename,
-                prop_list=[key],
-                into_instance=self,
-                skip_missing_props=True,
-            )
+            with local.cwd(_folder):
+                loaded = utils.indexed_pickler_load(
+                    filename, prop_list=[key], skip_missing_props=True,
+                )
 
-            # Try again
-            try:
-                return Munch.__getattr__(self, key)
-            except AttributeError:
-                # (An attempt to deal with attributes that get added to
-                # task Results but that can be allowed to be None -
-                # and gracefully allowing us to load versions of the
-                # Result klass in which this attribute is missing.)
-                #
-                # The attribute is also not in the pickle.  If this
-                # attribute is required and allowed to be None, set
-                # it so, else raise.
-                required_props = object.__getattribute__(self, "required_props")
-                types = required_props.get(key, None)
-                if isinstance(types, tuple) and type(None) in types:
-                    self[key] = None
-                    return None
-                # key not found or not allowed to be None:
-                raise AttributeError
+                if isinstance(loaded[key], ArrayResult):
+                    setattr(self, key, loaded[key].arr())
+                else:
+                    setattr(self, key, loaded[key])
+
+                # Try again
+                try:
+                    return Munch.__getattr__(self, key)
+                except AttributeError:
+                    # (An attempt to deal with attributes that get added to
+                    # task Results but that can be allowed to be None -
+                    # and gracefully allowing us to load versions of the
+                    # Result klass in which this attribute is missing.)
+                    #
+                    # The attribute is also not in the pickle.  If this
+                    # attribute is required and allowed to be None, set
+                    # it so, else raise.
+                    required_props = object.__getattribute__(self, "required_props")
+                    types = required_props.get(key, None)
+                    if isinstance(types, tuple) and type(None) in types:
+                        self[key] = None
+                        return None
+                    # key not found or not allowed to be None:
+                    raise AttributeError
 
     @classmethod
     def load_from_folder(cls, folder, prop_list=None):
@@ -140,12 +224,19 @@ class BaseResult(Munch):
         part of the Munch
         """
         folder = local.path(folder)
-        inst = cls(folder, is_loaded_result=True)
-        utils.indexed_pickler_load(
-            folder / cls.filename, into_instance=inst, prop_list=prop_list
-        )
+        with local.cwd(folder):
+            inst = cls(folder, is_loaded_result=True)
+            loaded = utils.indexed_pickler_load(
+                folder / cls.filename, prop_list=prop_list
+            )
 
-        object.__setattr__(inst, "_folder", folder)
+            for key in loaded:
+                if isinstance(loaded[key], ArrayResult):
+                    setattr(inst, key, loaded[key].arr())
+                else:
+                    setattr(inst, key, loaded[key])
+
+            object.__setattr__(inst, "_folder", folder)
 
         return inst
 

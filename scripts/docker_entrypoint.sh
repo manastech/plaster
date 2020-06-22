@@ -111,12 +111,6 @@ else
 	fi
 fi
 
-export ERISYON_ROOT=/erisyon
-
-# This is now to only place that PYTHONPATH is set. (There were previously several over-rides)
-export PYTHONPATH=${PYTHONPATH}:${ERISYON_ROOT}:${ERISYON_ROOT}/overloads:${ERISYON_ROOT}/plaster/vendor:/venv/.venv/lib/python3.8/site-packages
-export PATH=$PATH:/erisyon:/erisyon/plaster:/venv/.venv/bin
-
 # CHECK for a valid stdin tty, i.e. tty 0; `-t 0` is bash-ese for test for file descriptor 0
 export ERISYON_HEADLESS=1
 if [[ -t 0 ]]; then

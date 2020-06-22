@@ -13,6 +13,7 @@ class TestNNParams(Params):
         rare_penalty=0.8,
         penalty_coefs=None,
         radius=15.0,
+        random_seed=None,
     )
 
     schema = s(
@@ -57,5 +58,6 @@ class TestNNParams(Params):
             ),
             rare_penalty=s.is_float(noneable=True),
             radius=s.is_float(),
+            random_seed=s.is_int(noneable=True),
         )
     )

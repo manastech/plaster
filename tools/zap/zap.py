@@ -531,8 +531,17 @@ def arrays(
         _debug_mode=_debug_mode,
     )
 
+    if len(result_batches) == 0:
+        raise ValueError("No batches were returned")
     first_batch = result_batches[0]
+    if isinstance(first_batch, Exception):
+        raise first_batch
+    if len(first_batch) == 0:
+        raise ValueError("First batch had no elements")
     first_return = first_batch[0]
+    if isinstance(first_return, Exception):
+        raise first_return
+
     assert isinstance(first_return, tuple)
     n_fields = len(first_return)
 
